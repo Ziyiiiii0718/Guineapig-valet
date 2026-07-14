@@ -1,0 +1,71 @@
+# Decision Log
+
+## Decision 1: Phase 1A Does Not Implement Real AI
+
+Original ambiguity: The requirements describe AI classification, but the task says Phase 1A must not depend on the AI service.
+
+Chosen decision: Define TypeScript AI boundary types and documentation only.
+
+Why: Authentication, database design, and user isolation should be stable before adding model infrastructure.
+
+Alternatives: Build a mock classifier now; build FastAPI now.
+
+Consequences: Dashboard has placeholders, but architecture stays honest.
+
+Can revisit: Yes, in the AI reference-photo and classification phases.
+
+## Decision 2: One Primary Classification Result First
+
+Original ambiguity: Requirements mention multiple labels and multi-pet photos, while the task asks for one primary classification result.
+
+Chosen decision: Store statuses for specific pet, unknown, not a guinea pig, and needs review. Treat reliable multi-pet detection as future work.
+
+Why: Single-result review is easier to explain, test, and ship.
+
+Alternatives: Many labels per photo from day one.
+
+Consequences: Multi-pet support requires a later schema and UI update.
+
+Can revisit: Yes.
+
+## Decision 3: Supabase Auth Owns Passwords
+
+Original ambiguity: The data model draft mentions users, but credentials should not be stored by the app.
+
+Chosen decision: Use `auth.users` and optional `profiles`; never create a password table.
+
+Why: Supabase Auth handles hashing, sessions, and credential workflows.
+
+Alternatives: Custom auth.
+
+Consequences: App code depends on Supabase Auth configuration for real login.
+
+Can revisit: Unlikely unless the auth provider changes.
+
+## Decision 4: Simple UI First
+
+Original ambiguity: Portfolio-quality can imply heavy visual polish.
+
+Chosen decision: Build simple, responsive, accessible pages with clear placeholders.
+
+Why: Early phases should prove architecture and security first.
+
+Alternatives: Build a highly branded UI immediately.
+
+Consequences: Visual polish is deferred but the UI remains usable.
+
+Can revisit: Yes, in portfolio polish.
+
+## Decision 5: Cascade Deletion Is Used Only for User-Owned Dependent Data
+
+Original ambiguity: Deleting pets or photos could remove related data unexpectedly.
+
+Chosen decision: Cascade records that cannot stand alone, keep album/photo independence where appropriate, and document cleanup duties.
+
+Why: Users expect private account deletion to remove their data, but removing a pet should not silently delete the whole photo library.
+
+Alternatives: Restrict all deletes; cascade everything.
+
+Consequences: Some cleanup needs application logic, especially storage objects.
+
+Can revisit: Yes after photo features are implemented.
