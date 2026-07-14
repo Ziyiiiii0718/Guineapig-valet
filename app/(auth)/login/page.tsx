@@ -4,11 +4,13 @@ import { ConfigNotice } from "@/components/config-notice";
 import { signInAction } from "@/app/actions/auth";
 import { getPublicEnvStatus } from "@/lib/env";
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: { error?: string; message?: string };
+  searchParams?: Promise<{ error?: string; message?: string }>;
 }) {
+  const params = await searchParams;
+
   return (
     <div className="mx-auto max-w-md space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
@@ -22,8 +24,8 @@ export default function LoginPage({
       <AuthForm
         action={signInAction}
         buttonLabel="Log in"
-        error={searchParams?.error}
-        message={searchParams?.message}
+        error={params?.error}
+        message={params?.message}
       />
       <p className="text-sm text-stone-600">
         New to PiggieVault?{" "}

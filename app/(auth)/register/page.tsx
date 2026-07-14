@@ -4,11 +4,13 @@ import { ConfigNotice } from "@/components/config-notice";
 import { signUpAction } from "@/app/actions/auth";
 import { getPublicEnvStatus } from "@/lib/env";
 
-export default function RegisterPage({
+export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams?: { error?: string; message?: string };
+  searchParams?: Promise<{ error?: string; message?: string }>;
 }) {
+  const params = await searchParams;
+
   return (
     <div className="mx-auto max-w-md space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
@@ -22,8 +24,8 @@ export default function RegisterPage({
       <AuthForm
         action={signUpAction}
         buttonLabel="Register"
-        error={searchParams?.error}
-        message={searchParams?.message}
+        error={params?.error}
+        message={params?.message}
       />
       <p className="text-sm text-stone-600">
         Already have an account?{" "}
