@@ -8,21 +8,35 @@ describe("environment validation", () => {
     expect(status.isConfigured).toBe(false);
     expect(status.missingKeys).toEqual([
       "NEXT_PUBLIC_SUPABASE_URL",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY",
     ]);
   });
 
   it("accepts complete public Supabase configuration", () => {
     const env = {
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
     };
 
     expect(getPublicEnvStatus(env).isConfigured).toBe(true);
     expect(getSupabasePublicConfig(env)).toEqual({
       url: "https://example.supabase.co",
-      anonKey: "anon",
+      publishableKey: "publishable",
     });
+  });
+
+  it("keeps a legacy anon-key fallback for existing local setups", () => {
+    const env = {
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "legacy-anon",
+    };
+
+    expect(getPublicEnvStatus(env)).toEqual({
+      isConfigured: true,
+      missingKeys: [],
+      usingLegacyAnonKey: true,
+    });
+    expect(getSupabasePublicConfig(env).publishableKey).toBe("legacy-anon");
   });
 
   it("throws a clear error before creating Supabase clients when keys are missing", () => {

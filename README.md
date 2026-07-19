@@ -13,6 +13,7 @@ Implemented:
 - Supabase browser and server client helpers.
 - Server-side authentication actions for login, registration, and logout.
 - Environment-variable validation and missing-configuration messaging.
+- First-round visual foundation with centralized design tokens and small reusable UI components.
 - Initial PostgreSQL schema and Row Level Security migration.
 - Tests for environment validation and auth form validation.
 - Architecture, security, database, roadmap, decision, and learning documentation.
@@ -113,26 +114,24 @@ Then add real Supabase values to `.env.local`.
 Browser-safe:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-Server-only:
-
-- `SUPABASE_SERVICE_ROLE_KEY`, reserved for future server-only maintenance tasks.
-
-Future AI service:
-
-- `AI_SERVICE_URL`
-- `AI_SERVICE_API_KEY`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
 Never commit real credentials.
+The code also accepts legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a fallback for existing local setups. New setup should use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+
+Do not put Supabase secret keys or service-role keys in `NEXT_PUBLIC_` variables. This Phase 1A app does not require a service-role key.
 
 ## Supabase Setup
 
 1. Create a Supabase project.
-2. Copy the project URL and anon key into `.env.local`.
-3. Keep the service-role key server-only.
-4. Create a private storage bucket later when photo upload is implemented.
-5. Run the initial migration in `supabase/migrations/0001_initial_schema.sql`.
+2. Copy the Project URL into `NEXT_PUBLIC_SUPABASE_URL`.
+3. Copy the client-safe Publishable key into `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+4. Check that email/password authentication is enabled.
+5. Configure the local redirect URL: `http://localhost:3000/auth/callback`.
+6. Create a private storage bucket later when photo upload is implemented.
+7. Run the initial migration in `supabase/migrations/0001_initial_schema.sql`.
+
+Detailed setup and verification steps are in [Supabase setup](docs/SUPABASE_SETUP.md).
 
 ## Database Migration
 
@@ -168,6 +167,7 @@ Future tests should cover server actions, RLS behavior through integration tests
 
 - Real login and registration require Supabase credentials.
 - Database migration has not been executed against a live Supabase project in this repository.
+- Remote RLS behavior has not been verified until the migration is applied to a real Supabase project.
 - Dashboard data sections are placeholders.
 - Photo upload, storage, albums, weights, health records, and AI classification are not implemented yet.
 - AI service does not exist yet.
@@ -175,8 +175,9 @@ Future tests should cover server actions, RLS behavior through integration tests
 ## Security Notes
 
 - Passwords are handled by Supabase Auth, not by application tables.
-- The browser only receives public Supabase configuration.
-- Service-role credentials must remain server-only because they can bypass normal Row Level Security.
+- The browser only receives the Supabase Project URL and client-safe Publishable key.
+- Publishable keys do not bypass RLS.
+- Secret or service-role credentials must remain server-only because they can bypass normal Row Level Security.
 - RLS policies are designed so users can only access rows where `auth.uid()` matches ownership.
 - Frontend filtering is not considered sufficient authorization.
 

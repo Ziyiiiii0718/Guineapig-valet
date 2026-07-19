@@ -1,13 +1,12 @@
+import { Card } from "@/components/ui/card";
+
 export default function Loading() {
   return (
-    <div
-      className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm"
-      role="status"
-      aria-live="polite"
-    >
-      <p className="text-sm font-medium text-stone-700">
+    <Card className="flex items-center gap-3" role="status" aria-live="polite">
+      <span className="spinner" aria-hidden="true" />
+      <p className="text-secondary text-sm font-semibold">
         Loading PiggieVault...
       </p>
-    </div>
+    </Card>
   );
 }

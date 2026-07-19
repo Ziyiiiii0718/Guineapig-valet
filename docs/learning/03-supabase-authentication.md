@@ -11,7 +11,7 @@ PiggieVault stores private pet photos and care notes. Users must prove who they 
 ## Complete Request and Data Flow
 
 ```text
-User submits email/password -> server action validates form -> Supabase Auth validates credentials -> session cookie is set -> user reaches dashboard
+User submits email/password -> server action validates form -> Supabase Auth validates credentials -> session cookie is set -> proxy and dashboard check the session -> user reaches dashboard
 ```
 
 ## Important Files
@@ -26,6 +26,8 @@ User submits email/password -> server action validates form -> Supabase Auth val
 ## Responsibilities
 
 The form collects inputs. Zod validates shape. Server actions call Supabase. The proxy protects routes. Supabase stores credentials and manages sessions.
+
+Registration uses the request origin to build an absolute `/auth/callback` URL, so Supabase email confirmation can return to the local or deployed site correctly.
 
 ## Concepts
 
@@ -63,11 +65,11 @@ Passwords never enter application tables. Missing config is handled clearly. Inv
 2. What is `auth.users`? Supabase's internal user table.
 3. What does logout do? Clears the Supabase session.
 4. Why validate forms before Supabase? To provide predictable errors and avoid bad requests.
-5. What still needs real credentials? End-to-end login and registration testing.
+5. What still needs real credentials? End-to-end registration, email confirmation, login, logout, and session persistence testing.
 
 ## How I would explain this feature in 60 seconds.
 
-PiggieVault uses Supabase Auth so I do not build password storage myself. The login and registration forms submit to server actions, which validate email and password input and call Supabase. If authentication succeeds, Supabase creates or updates the session. The dashboard checks the session server-side, and database policies will use the same authenticated user ID to protect data.
+PiggieVault uses Supabase Auth so I do not build password storage myself. The login and registration forms submit to server actions, which validate email and password input and call Supabase. If authentication succeeds, Supabase creates or updates the session cookie. The proxy and dashboard check that session server-side, and database policies use the same authenticated user ID to protect rows.
 
 ## Glossary
 

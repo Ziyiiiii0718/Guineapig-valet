@@ -15,8 +15,8 @@ export default async function LoginPage({
     <div className="mx-auto max-w-md space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
       <div>
-        <h1 className="text-3xl font-bold text-stone-950">Log in</h1>
-        <p className="mt-2 text-sm text-stone-600">
+        <h1 className="heading-page">Log in</h1>
+        <p className="text-secondary mt-2 text-sm">
           Use your Supabase Auth email and password once the project is
           configured.
         </p>
@@ -27,11 +27,11 @@ export default async function LoginPage({
         error={params?.error}
         message={params?.message}
       />
-      <p className="text-sm text-stone-600">
+      <p className="text-secondary text-sm">
         New to PiggieVault?{" "}
         <Link
           href="/register"
-          className="font-medium text-emerald-700 underline"
+          className="focus-ring rounded-sm font-semibold text-[var(--color-primary-hover)] underline"
         >
           Create an account
         </Link>

@@ -69,3 +69,17 @@ Alternatives: Restrict all deletes; cascade everything.
 Consequences: Some cleanup needs application logic, especially storage objects.
 
 Can revisit: Yes after photo features are implemented.
+
+## Decision 6: Prefer Publishable Key Naming While Keeping Legacy Fallback
+
+Original ambiguity: The project originally used `NEXT_PUBLIC_SUPABASE_ANON_KEY`, while current Supabase setup language often refers to a client-safe Publishable key.
+
+Chosen decision: Use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.example` and docs, while keeping `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a code fallback for existing local setups.
+
+Why: This keeps setup language current without breaking anyone who already configured the legacy variable locally.
+
+Alternatives: Keep only the anon-key name; rename everything and drop fallback.
+
+Consequences: The environment helper has compatibility logic, and docs must explain which variable new setups should use.
+
+Can revisit: Yes, after confirming all local and deployed environments have migrated.

@@ -15,8 +15,8 @@ export default async function RegisterPage({
     <div className="mx-auto max-w-md space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
       <div>
-        <h1 className="text-3xl font-bold text-stone-950">Create account</h1>
-        <p className="mt-2 text-sm text-stone-600">
+        <h1 className="heading-page">Create account</h1>
+        <p className="text-secondary mt-2 text-sm">
           Registration is wired for Supabase Auth and needs real environment
           variables.
         </p>
@@ -27,9 +27,12 @@ export default async function RegisterPage({
         error={params?.error}
         message={params?.message}
       />
-      <p className="text-sm text-stone-600">
+      <p className="text-secondary text-sm">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-emerald-700 underline">
+        <Link
+          href="/login"
+          className="focus-ring rounded-sm font-semibold text-[var(--color-primary-hover)] underline"
+        >
           Log in
         </Link>
       </p>

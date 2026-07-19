@@ -14,6 +14,8 @@ Pet photos and health notes are private. Authorization must be enforced even if 
 Request includes Supabase session -> PostgreSQL knows auth.uid() -> RLS policy checks row user_id -> allowed rows are returned
 ```
 
+Remote RLS behavior must be verified against a real Supabase project after the migration is applied. Static SQL review is useful, but it is not the same as executing two-user isolation tests.
+
 ## Important Files
 
 - `supabase/migrations/0001_initial_schema.sql`
@@ -61,6 +63,7 @@ Policies must include both read and write checks. Service-role credentials bypas
 3. What is `USING`? It filters existing rows.
 4. What is `WITH CHECK`? It validates inserted or updated rows.
 5. Why still validate on the backend? For better errors and defense in depth.
+6. How do you test RLS? Create two test users, insert data for User A, then confirm User B cannot read or modify it.
 
 ## How I would explain this feature in 60 seconds.
 

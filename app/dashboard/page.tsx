@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { logoutAction } from "@/app/actions/auth";
 import { ConfigNotice } from "@/components/config-notice";
 import { PlaceholderSection } from "@/components/placeholder-section";
+import { Button } from "@/components/ui/button";
 import { getPublicEnvStatus } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -63,18 +64,15 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-stone-950">Dashboard</h1>
-          <p className="mt-2 text-sm text-stone-600">
+          <h1 className="heading-page">Dashboard</h1>
+          <p className="text-secondary mt-2 text-sm">
             Signed in as {user.email}. Phase 1A shows honest placeholders only.
           </p>
         </div>
         <form action={logoutAction}>
-          <button
-            type="submit"
-            className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-offset-2"
-          >
+          <Button type="submit" variant="secondary">
             Log out
-          </button>
+          </Button>
         </form>
       </div>
       <div className="grid gap-4 md:grid-cols-2">

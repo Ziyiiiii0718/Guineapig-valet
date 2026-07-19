@@ -2,7 +2,7 @@
 
 ## What This Feature Does
 
-The first UI provides a clean landing page, auth forms, navigation, error/loading states, and dashboard placeholders.
+The first UI provides a clean landing page, auth forms, navigation, error/loading states, dashboard placeholders, centralized design tokens, and a small set of reusable components.
 
 ## Why It Is Needed
 
@@ -23,10 +23,16 @@ User visits page -> sees clear navigation -> submits accessible form -> receives
 - `components/main-nav.tsx`
 - `components/auth-form.tsx`
 - `components/placeholder-section.tsx`
+- `components/ui/button.tsx`
+- `components/ui/card.tsx`
+- `components/ui/form-field.tsx`
+- `components/ui/badge.tsx`
+- `components/ui/alert.tsx`
+- `app/globals.css`
 
 ## Responsibilities
 
-Navigation exposes routes. Forms use labels and required fields. Placeholder sections clearly say features are planned. Error and loading pages provide feedback.
+Navigation exposes routes. Forms use labels and required fields. Placeholder sections clearly say features are planned. Error and loading pages provide feedback. Global CSS variables define the warm oatmeal, green, orange, brown text, radius, shadow, and font system in one place.
 
 ## Concepts
 
@@ -34,7 +40,7 @@ Intuitive: accessibility means more people can use the app.
 
 PiggieVault example: login inputs have labels so screen readers can identify them.
 
-Technical: semantic HTML, focus states, responsive layouts, labels, and status roles improve usability and accessibility.
+Technical: semantic HTML, focus states, responsive layouts, labels, status roles, and centralized design tokens improve usability and maintainability.
 
 Interview explanation: "I kept the UI simple but professional, with semantic forms, responsive layout, and honest placeholder states."
 
@@ -65,10 +71,11 @@ The UI does not fake private data. It communicates missing Supabase configuratio
 3. How is mobile handled? Layouts use responsive Tailwind classes.
 4. Why show placeholders? To communicate planned scope honestly.
 5. Why avoid a component library now? It is unnecessary for Phase 1A.
+6. Why use design tokens? They make color, radius, shadow, and typography changes consistent.
 
 ## How I would explain this feature in 60 seconds.
 
-The Phase 1A UI is intentionally simple but not careless. It has a readable landing page, accessible login and registration forms, responsive navigation, and a dashboard that clearly labels planned features. I included loading, error, empty, and missing-configuration states so the app behaves honestly even before Supabase is configured. Visual polish is planned later after the secure foundation is working.
+The Phase 1A UI is intentionally simple but not careless. It uses centralized design tokens for the warm oatmeal background, green brand color, soft cards, rounded buttons, and visible focus states. The landing page, auth forms, navigation, dashboard placeholders, loading state, and error state share the same small component foundation. It stays honest about unimplemented features and leaves complex visual polish for later.
 
 ## Glossary
 
@@ -77,3 +84,5 @@ The Phase 1A UI is intentionally simple but not careless. It has a readable land
 - Focus state: visible indication of keyboard focus.
 - Responsive design: layout adapting to screen size.
 - Empty state: UI shown when no data exists.
+- Design token: named style value such as a color, radius, or shadow.
+- Component: reusable UI building block.

@@ -1,3 +1,7 @@
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { FormField } from "@/components/ui/form-field";
+
 type AuthFormProps = {
   action: (formData: FormData) => Promise<void>;
   buttonLabel: string;
@@ -12,67 +16,39 @@ export function AuthForm({
   message,
 }: AuthFormProps) {
   return (
-    <form
-      action={action}
-      className="space-y-4 rounded-lg border border-stone-200 bg-white p-6 shadow-sm"
-    >
+    <form action={action} className="card space-y-4">
       {message ? (
-        <p
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-          role="status"
-        >
+        <Alert tone="success" role="status" className="text-sm">
           {message}
-        </p>
+        </Alert>
       ) : null}
       {error ? (
-        <p
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900"
-          role="alert"
-        >
+        <Alert tone="error" role="alert" className="text-sm">
           {error}
-        </p>
+        </Alert>
       ) : null}
-      <div>
-        <label
-          htmlFor="email"
-          className="block text-sm font-medium text-stone-800"
-        >
-          Email
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-950 shadow-sm focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700"
-        />
-      </div>
-      <div>
-        <label
-          htmlFor="password"
-          className="block text-sm font-medium text-stone-800"
-        >
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete={
-            buttonLabel === "Register" ? "new-password" : "current-password"
-          }
-          required
-          minLength={8}
-          className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-950 shadow-sm focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700"
-        />
-      </div>
-      <button
-        type="submit"
-        className="w-full rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-700 focus:ring-offset-2"
-      >
+      <FormField
+        id="email"
+        name="email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        required
+      />
+      <FormField
+        id="password"
+        name="password"
+        label="Password"
+        type="password"
+        autoComplete={
+          buttonLabel === "Register" ? "new-password" : "current-password"
+        }
+        required
+        minLength={8}
+      />
+      <Button type="submit" className="w-full">
         {buttonLabel}
-      </button>
+      </Button>
     </form>
   );
 }

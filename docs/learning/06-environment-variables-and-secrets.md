@@ -2,7 +2,7 @@
 
 ## What This Feature Does
 
-The app validates required Supabase public environment variables and documents server-only secrets.
+The app validates required Supabase public environment variables and avoids requiring server-only secrets in Phase 1A.
 
 ## Why It Is Needed
 
@@ -11,7 +11,7 @@ Credentials must not be hard-coded. Different environments need different config
 ## Complete Request and Data Flow
 
 ```text
-App starts -> env helper checks required keys -> configured app creates Supabase client -> missing config shows setup notice
+App starts -> env helper checks Project URL and Publishable key -> configured app creates Supabase client -> missing config shows setup notice
 ```
 
 ## Important Files
@@ -25,13 +25,15 @@ App starts -> env helper checks required keys -> configured app creates Supabase
 
 `.env.example` lists placeholder names. `lib/env.ts` validates values. UI notices explain missing config. Real values belong in `.env.local`, which is ignored by Git.
 
+New setup should use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The code still accepts `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a fallback for older local environments.
+
 ## Concepts
 
 Intuitive: environment variables are settings kept outside code.
 
-PiggieVault example: the Supabase URL and anon key point the app at the correct backend.
+PiggieVault example: the Supabase Project URL and Publishable key point the app at the correct backend.
 
-Technical: `NEXT_PUBLIC_` variables are bundled for browser use; server-only variables must never be exposed to client bundles.
+Technical: `NEXT_PUBLIC_` variables are bundled for browser use; server-only variables must never be exposed to client bundles. A Publishable key is client-safe, but a secret or service-role key can bypass normal protections and must stay server-only.
 
 Interview explanation: "I separate public config from secrets and validate required values before creating clients."
 
@@ -45,7 +47,7 @@ Throw on startup: strict, but annoying before setup. Silent missing values: conf
 
 ## Security, Privacy, Performance, Failure
 
-No real secrets are committed. Missing config does not leak details. Service-role key is documented as server-only because it can bypass RLS.
+No real secrets are committed. Missing config does not leak details. Service-role keys are deliberately not required for Phase 1A because they can bypass RLS.
 
 ## Common Mistakes
 
@@ -65,12 +67,13 @@ No real secrets are committed. Missing config does not leak details. Service-rol
 
 ## How I would explain this feature in 60 seconds.
 
-PiggieVault uses environment variables for external configuration like Supabase project URL and keys. The `.env.example` file shows the names but no real values. Public Supabase values are allowed in the browser, while service-role and future AI keys must stay server-only. The app validates required keys and shows a clear setup message instead of pretending authentication is configured.
+PiggieVault uses environment variables for external configuration like the Supabase Project URL and Publishable key. The `.env.example` file shows the names but no real values. Public Supabase values are allowed in the browser, while secret and service-role keys must stay server-only. The app validates required keys and shows a clear setup message instead of pretending authentication is configured.
 
 ## Glossary
 
 - Environment variable: runtime configuration value.
 - Secret: sensitive credential.
 - Public key: safe-to-expose project value.
+- Publishable key: current Supabase name for a client-safe key.
 - Service role: privileged Supabase key.
 - `.env.local`: local uncommitted environment file.

@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPublicEnvStatus } from "@/lib/env";
 import { authFormSchema } from "@/lib/validation/auth";
@@ -56,17 +57,25 @@ export async function signUpAction(formData: FormData) {
     );
   }
 
+  const requestHeaders = await headers();
+  const origin = requestHeaders.get("origin") ?? "http://localhost:3000";
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      emailRedirectTo: "/auth/callback",
+      emailRedirectTo: `${origin}/auth/callback`,
     },
   });
 
   if (error) {
     redirectWithAuthError("/register", error.message);
+  }
+
+  if (!data.session) {
+    redirect(
+      "/login?message=Registration%20started.%20Check%20your%20email%20to%20confirm%20your%20account.",
+    );
   }
 
   redirect("/dashboard");
