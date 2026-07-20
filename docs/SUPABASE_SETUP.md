@@ -20,6 +20,16 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-client-safe-publishable-key
    - `http://localhost:3000/auth/callback`
    - your deployed callback URL later, for example `https://your-domain.example/auth/callback`
 
+## Auth Email Settings
+
+Email confirmation may be disabled temporarily for local-only auth testing when the default Supabase email provider is rate limited.
+
+Before production:
+
+1. Re-enable email confirmation.
+2. Configure custom SMTP for confirmation, recovery, and other auth emails.
+3. Re-test registration, confirmed login, logout, session persistence, and protected dashboard access.
+
 ## Migration Options
 
 Safest dashboard path:

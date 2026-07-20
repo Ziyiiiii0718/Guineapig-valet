@@ -23,9 +23,11 @@ export function MainNav() {
             className="brand-logo focus-ring rounded-[var(--radius-md)]"
           >
             <span className="brand-logo-mark" aria-hidden="true" />
-            PiggieVault
+            <span>
+              Piggie<span className="brand-logo-word">Vault</span>
+            </span>
           </Link>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:justify-end">
             {links.map((link) => {
               const isActive =
                 link.href === "/"

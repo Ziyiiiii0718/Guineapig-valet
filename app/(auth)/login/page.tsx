@@ -12,9 +12,10 @@ export default async function LoginPage({
   const params = await searchParams;
 
   return (
-    <div className="mx-auto max-w-md space-y-6">
+    <div className="auth-shell space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
-      <div>
+      <div className="auth-intro">
+        <p className="section-kicker">Welcome back</p>
         <h1 className="heading-page">Log in</h1>
         <p className="text-secondary mt-2 text-sm">
           Use your Supabase Auth email and password once the project is
@@ -29,10 +30,7 @@ export default async function LoginPage({
       />
       <p className="text-secondary text-sm">
         New to PiggieVault?{" "}
-        <Link
-          href="/register"
-          className="focus-ring rounded-sm font-semibold text-[var(--color-primary-hover)] underline"
-        >
+        <Link href="/register" className="link-primary focus-ring rounded-sm">
           Create an account
         </Link>
       </p>

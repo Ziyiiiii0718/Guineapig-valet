@@ -11,26 +11,31 @@ const sections = [
     title: "Pets",
     description:
       "Pet profile CRUD begins in Phase 1B. No pet records are loaded in Phase 1A.",
+    iconTone: "green" as const,
   },
   {
     title: "Recent photos",
     description:
       "Private image upload and gallery pages are planned for later phases.",
+    iconTone: "olive" as const,
   },
   {
     title: "Photos needing review",
     description:
       "AI prediction review depends on the future Python/FastAPI embedding service.",
+    iconTone: "accent" as const,
   },
   {
     title: "Latest weight records",
     description:
       "Weight tracking and charts are planned after pet profiles exist.",
+    iconTone: "olive" as const,
   },
   {
     title: "Recent health records",
     description:
       "Health notes will be personal tracking only and will not provide medical advice.",
+    iconTone: "green" as const,
   },
 ];
 
@@ -62,25 +67,26 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div className="dashboard-header flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="relative z-10">
           <h1 className="heading-page">Dashboard</h1>
           <p className="text-secondary mt-2 text-sm">
             Signed in as {user.email}. Phase 1A shows honest placeholders only.
           </p>
         </div>
-        <form action={logoutAction}>
+        <form action={logoutAction} className="relative z-10">
           <Button type="submit" variant="secondary">
             Log out
           </Button>
         </form>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         {sections.map((section) => (
           <PlaceholderSection
             key={section.title}
             title={section.title}
             description={section.description}
+            iconTone={section.iconTone}
           />
         ))}
       </div>

@@ -15,6 +15,7 @@ Implemented:
 - Environment-variable validation and missing-configuration messaging.
 - First-round visual foundation with centralized design tokens and small reusable UI components.
 - Initial PostgreSQL schema and Row Level Security migration.
+- Real Supabase project link and initial remote migration verification.
 - Tests for environment validation and auth form validation.
 - Architecture, security, database, roadmap, decision, and learning documentation.
 
@@ -132,6 +133,7 @@ Do not put Supabase secret keys or service-role keys in `NEXT_PUBLIC_` variables
 7. Run the initial migration in `supabase/migrations/0001_initial_schema.sql`.
 
 Detailed setup and verification steps are in [Supabase setup](docs/SUPABASE_SETUP.md).
+Current remote verification notes are in [Supabase verification](docs/SUPABASE_VERIFICATION.md).
 
 ## Database Migration
 
@@ -165,9 +167,9 @@ Future tests should cover server actions, RLS behavior through integration tests
 
 ## Known Limitations
 
-- Real login and registration require Supabase credentials.
-- Database migration has not been executed against a live Supabase project in this repository.
-- Remote RLS behavior has not been verified until the migration is applied to a real Supabase project.
+- Confirmed-account login requires completing email confirmation for a non-personal test user.
+- The initial database migration has been applied to the linked Supabase project.
+- Full two-user RLS isolation still needs confirmed test users.
 - Dashboard data sections are placeholders.
 - Photo upload, storage, albums, weights, health records, and AI classification are not implemented yet.
 - AI service does not exist yet.

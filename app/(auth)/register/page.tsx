@@ -12,9 +12,10 @@ export default async function RegisterPage({
   const params = await searchParams;
 
   return (
-    <div className="mx-auto max-w-md space-y-6">
+    <div className="auth-shell space-y-6">
       <ConfigNotice status={getPublicEnvStatus()} />
-      <div>
+      <div className="auth-intro">
+        <p className="section-kicker">Private care notes</p>
         <h1 className="heading-page">Create account</h1>
         <p className="text-secondary mt-2 text-sm">
           Registration is wired for Supabase Auth and needs real environment
@@ -29,10 +30,7 @@ export default async function RegisterPage({
       />
       <p className="text-secondary text-sm">
         Already have an account?{" "}
-        <Link
-          href="/login"
-          className="focus-ring rounded-sm font-semibold text-[var(--color-primary-hover)] underline"
-        >
+        <Link href="/login" className="link-primary focus-ring rounded-sm">
           Log in
         </Link>
       </p>

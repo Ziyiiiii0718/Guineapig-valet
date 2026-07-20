@@ -34,3 +34,6 @@ Thumbs.db
 
 # generated docs or temporary exports
 *.tmp
+
+# Supabase CLI local project metadata
+supabase/.temp/

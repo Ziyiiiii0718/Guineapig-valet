@@ -18,8 +18,8 @@ export default function HomePage() {
   return (
     <div className="space-y-10">
       <ConfigNotice status={envStatus} />
-      <section className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-        <div>
+      <section className="hero-shell grid gap-8 lg:grid-cols-[1.16fr_0.84fr] lg:items-center">
+        <div className="max-w-3xl">
           <p className="section-kicker">Private pet-care workspace</p>
           <h1 className="heading-hero mt-3">
             PiggieVault keeps guinea pig memories and care notes in one safe
@@ -44,18 +44,19 @@ export default function HomePage() {
             </ButtonLink>
           </div>
         </div>
-        <Card as="aside" soft>
+        <Card as="aside" soft className="hero-visual">
           <div className="flex items-start justify-between gap-4">
             <h2 className="heading-section">Phase 1A status</h2>
             <Badge tone="success">Foundation</Badge>
           </div>
+          <div className="meadow-strip mt-5" aria-hidden="true" />
           <ul className="mt-4 space-y-3">
             {plannedFeatures.map((feature) => (
-              <li key={feature} className="text-secondary flex gap-3 text-sm">
-                <span
-                  className="mt-1 h-2 w-2 rounded-full bg-[var(--color-primary)]"
-                  aria-hidden="true"
-                />
+              <li
+                key={feature}
+                className="text-secondary flex items-start gap-3 text-sm"
+              >
+                <span className="feature-dot mt-1.5" aria-hidden="true" />
                 <span>{feature}</span>
               </li>
             ))}

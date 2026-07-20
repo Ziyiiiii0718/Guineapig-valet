@@ -50,10 +50,7 @@ export default function RootLayout({
           <PageContainer>{children}</PageContainer>
         </main>
         <footer className="app-footer">
-          <Link
-            href="/"
-            className="font-semibold text-[var(--color-primary-hover)]"
-          >
+          <Link href="/" className="link-primary">
             PiggieVault
           </Link>{" "}
           is in Phase 1A: authentication-ready foundation and placeholder

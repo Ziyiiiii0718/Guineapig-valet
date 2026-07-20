@@ -16,7 +16,7 @@ export function AuthForm({
   message,
 }: AuthFormProps) {
   return (
-    <form action={action} className="card space-y-4">
+    <form action={action} className="card auth-card space-y-4">
       {message ? (
         <Alert tone="success" role="status" className="text-sm">
           {message}
