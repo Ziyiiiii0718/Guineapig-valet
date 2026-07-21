@@ -18,12 +18,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const sections = [
   {
-    title: "Recent photos",
-    description:
-      "Private image upload and gallery pages are planned for later phases.",
-    iconTone: "olive" as const,
-  },
-  {
     title: "Photos needing review",
     description:
       "AI prediction review depends on the future Python/FastAPI embedding service.",
@@ -112,6 +106,38 @@ function DashboardPetSummary({
   );
 }
 
+function RecentPhotosUploadCard() {
+  return (
+    <Card className="placeholder-card">
+      <div className="placeholder-top">
+        <div className="min-w-0">
+          <div className="placeholder-title-row">
+            <span
+              className="placeholder-icon placeholder-icon-olive"
+              aria-hidden="true"
+            />
+            <h2 className="heading-section text-lg">Recent photos</h2>
+          </div>
+          <p className="text-secondary mt-3 text-sm leading-6">
+            Private upload is available now. Gallery browsing and timeline views
+            are still planned for the next photo phase.
+          </p>
+        </div>
+        <Badge tone="success">Upload live</Badge>
+      </div>
+      <div className="placeholder-empty">
+        <div className="empty-state text-sm">
+          No gallery is shown yet. Upload photos now, then browse them in a
+          later gallery phase.
+        </div>
+        <div className="mt-4">
+          <ButtonLink href="/photos/upload">Upload photos</ButtonLink>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default async function DashboardPage() {
   const envStatus = getPublicEnvStatus();
 
@@ -146,8 +172,8 @@ export default async function DashboardPage() {
         <div className="relative z-10">
           <h1 className="heading-page">Dashboard</h1>
           <p className="text-secondary mt-2 text-sm">
-            Signed in as {user.email}. Pet profiles are live; photo galleries,
-            AI, weight, and health remain planned.
+            Signed in as {user.email}. Pet profiles and private photo upload are
+            live; galleries, AI, weight, and health remain planned.
           </p>
         </div>
         <form action={logoutAction} className="relative z-10">
@@ -162,6 +188,7 @@ export default async function DashboardPage() {
           error={petSummary.error}
           pets={petSummary.pets}
         />
+        <RecentPhotosUploadCard />
         {sections.map((section) => (
           <PlaceholderSection
             key={section.title}

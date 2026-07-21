@@ -21,7 +21,7 @@ auth.users
 
 - `profiles`: optional application profile data for an authenticated user.
 - `pets`: guinea pig profiles owned by a user.
-- `photos`: private uploaded photo metadata.
+- `photos`: private uploaded photo metadata, including Storage path, original filename, file size, MIME type, dimensions, upload time, taken time, and AI status.
 - `pet_reference_photos`: reference photos for future AI embeddings.
 - `photo_pet_predictions`: AI or manual labels for photos.
 - `albums`: user-created photo collections.
@@ -58,3 +58,10 @@ See:
 
 - `supabase/migrations/0001_initial_schema.sql`
 - `supabase/migrations/0002_pet_avatar_storage.sql`
+- `supabase/migrations/0003_user_photo_upload_storage.sql`
+
+## Current Photo Upload Metadata
+
+General photo upload stores files in the private `user-photos` bucket and saves the object path in `photos.storage_path`. The object path must start with the same `user_id` as the row. This gives PostgreSQL a database-level check that matches the Storage policy convention.
+
+The current upload phase saves `mime_type` for new uploads and sets `ai_status` to `uploaded`. That status means the file was received but has not been classified by AI. Gallery browsing, albums, and AI prediction rows remain planned for later phases.

@@ -1,6 +1,6 @@
 # Supabase Verification
 
-Last verified: 2026-07-20
+Last verified: 2026-07-21
 
 Project ref: `urhwguxmvpxhlmgudrkm`
 
@@ -23,6 +23,9 @@ Applied migrations:
 
 - `supabase/migrations/0001_initial_schema.sql`
 - `supabase/migrations/0002_pet_avatar_storage.sql`
+- `supabase/migrations/0003_user_photo_upload_storage.sql`
+
+The `0003` migration creates the private `user-photos` bucket, general-photo Storage policies, `photos.mime_type`, the `uploaded` photo AI status value, and a storage-path ownership check.
 
 Remote migration status after `db push`:
 
@@ -30,6 +33,8 @@ Remote migration status after `db push`:
 - remote `0001`
 - local `0002`
 - remote `0002`
+- local `0003`
+- remote `0003`
 
 No remote database reset command was run.
 
@@ -103,6 +108,21 @@ Runtime Storage checks with two non-personal authenticated users confirmed:
 - User A could remove User A's avatar.
 - Temporary avatar objects and the temporary pet row were cleaned up where permitted.
 
+Private general photo Storage verified:
+
+- Bucket `user-photos` exists.
+- Bucket is private.
+- Bucket file size limit is 10 MB.
+- Allowed MIME types are `image/jpeg`, `image/png`, and `image/webp`.
+- Storage policies exist for select, insert, update, and delete on own general-photo objects.
+- Policy checks require the first object path folder to match `auth.uid()`.
+
+Photo metadata migration verified:
+
+- `photos.mime_type` exists.
+- `photos.ai_status` allows `uploaded`.
+- `photos.storage_path` must begin with the row's `user_id`.
+
 ## Authentication Verified
 
 Verified with the real Supabase Auth endpoint:
@@ -150,3 +170,11 @@ To finish the production auth and two-user checks:
 8. Log in as User B.
 9. Re-run two-user row and Storage checks with confirmed-email users.
 10. Clean up temporary test data where safe.
+
+To finish Phase 2A two-user runtime photo-upload checks:
+
+1. With two non-personal confirmed users, confirm User A can upload/read/delete User A's object.
+2. Confirm User B cannot read, overwrite, or delete User A's object.
+3. Confirm User B cannot read User A's `photos` row.
+4. Confirm User B cannot create a `photos` row whose `storage_path` starts with User A's ID.
+5. Clean up temporary test rows and objects where safe.

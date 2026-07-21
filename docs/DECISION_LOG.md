@@ -97,3 +97,31 @@ Alternatives: Make avatars public; store permanent signed URLs; implement the fu
 Consequences: The app stores object paths rather than URLs, creates signed URLs at render time, and must handle best-effort cleanup because PostgreSQL and Storage do not share one transaction.
 
 Can revisit: Yes, when general photo storage and reference-photo workflows are designed.
+
+## Decision 8: General Photos Upload Directly to Private Storage
+
+Original ambiguity: General photo upload could be implemented by sending files through Next.js Server Actions or by issuing signed upload requests for direct browser-to-Storage upload.
+
+Chosen decision: Use a separate private `user-photos` bucket and signed upload requests. The server verifies the authenticated user and generates paths under `<user-id>/<year>/<month>/...`; the browser uploads directly to Supabase Storage; the server then saves metadata in PostgreSQL.
+
+Why: Large image uploads are a poor fit for serverless request bodies. Direct Storage upload keeps the Next.js server responsible for authorization and metadata, not byte streaming.
+
+Alternatives: Proxy every file through the Next.js server; make the bucket public; reuse the `pet-avatars` bucket.
+
+Consequences: Storage and PostgreSQL do not share a transaction, so database-insert failures require best-effort Storage cleanup. General photos stay separate from pet avatars and future AI reference photos.
+
+Can revisit: Yes, if resumable uploads, background processing, or a dedicated upload service are added.
+
+## Decision 9: Initial Photo AI Status Is `uploaded`
+
+Original ambiguity: The existing `photos.ai_status` constraint only included classification-like values such as `needs_review`, even though this phase does not classify photos.
+
+Chosen decision: Add `uploaded` as an allowed photo status and use it for newly uploaded general photos.
+
+Why: `uploaded` honestly communicates that the photo exists but has not been analyzed.
+
+Alternatives: Reuse `needs_review`; add a processing queue status now.
+
+Consequences: Future AI phases can transition photos from `uploaded` into review or classification states without pretending analysis has already happened.
+
+Can revisit: Yes, when the AI job pipeline is designed.

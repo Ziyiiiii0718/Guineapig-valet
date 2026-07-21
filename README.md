@@ -1,6 +1,10 @@
 # PiggieVault
 
-PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository contains Phase 0, Phase 1A, and Phase 1B: project foundation, documentation, a runnable Next.js application shell, Supabase Auth wiring, database planning, authenticated pet-profile CRUD, private pet-avatar storage, and honest placeholder UI for future features.
+PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository contains the foundation through the private photo-upload phase: documentation, a runnable Next.js application shell, Supabase Auth wiring, database planning, authenticated pet-profile CRUD, private pet-avatar storage, private general-photo upload, and honest placeholder UI for future features.
+
+## Live Demo
+
+[PiggieVault - Live Website](https://guineapig-valet.vercel.app/)
 
 ## Current Development Status
 
@@ -14,24 +18,29 @@ Implemented:
 - Server-side authentication actions for login, registration, and logout.
 - Authenticated guinea pig profile CRUD at `/pets`.
 - Private pet profile-avatar upload, replacement, removal, signed rendering, and fallback initials.
+- Private general-photo upload at `/photos/upload` with direct browser uploads to Supabase Storage and PostgreSQL metadata inserts.
 - Dashboard pet summary backed by real private pet data.
+- Dashboard entry point for photo upload.
 - Server-side pet validation, ownership checks, and age display helpers.
+- Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, and best-effort Storage cleanup.
 - Environment-variable validation and missing-configuration messaging.
 - First-round visual foundation with centralized design tokens and small reusable UI components.
 - Initial PostgreSQL schema and Row Level Security migration.
 - Private `pet-avatars` Supabase Storage bucket and ownership-scoped Storage policies.
+- Private `user-photos` Supabase Storage bucket and ownership-scoped Storage policies.
 - Real Supabase project link and initial remote migration verification.
-- Tests for environment validation, auth form validation, pet validation, pet age calculation, and pet avatar behavior.
+- Vercel production deployment.
+- Tests for environment validation, auth form validation, pet validation, pet age calculation, pet avatar behavior, and photo upload validation/metadata helpers.
 - Architecture, security, database, roadmap, decision, and learning documentation.
 
 Planned but not implemented yet:
 
-- General photo upload and private gallery storage.
+- Full photo gallery and timeline browsing.
 - Albums and timelines.
 - Weight tracking.
 - Health records.
 - AI embeddings, classification, and review queue.
-- Deployment and portfolio polish.
+- Final portfolio polish.
 
 ## Main Features
 
@@ -40,7 +49,7 @@ PiggieVault is intended to eventually support:
 - User registration and login.
 - Private guinea pig profiles.
 - Private photo uploads.
-- Photo albums and chronological timelines.
+- Future photo albums and chronological timelines.
 - Weight and health history.
 - Reference photos for each pet.
 - Future AI image embedding classification.
@@ -134,7 +143,7 @@ Do not put Supabase secret keys or service-role keys in `NEXT_PUBLIC_` variables
 4. Check that email/password authentication is enabled.
 5. Configure the local redirect URL: `http://localhost:3000/auth/callback`.
 6. Apply the migrations in `supabase/migrations/`.
-7. Confirm the private `pet-avatars` bucket and Storage policies exist.
+7. Confirm the private `pet-avatars` and `user-photos` buckets and Storage policies exist.
 
 Detailed setup and verification steps are in [Supabase setup](docs/SUPABASE_SETUP.md).
 Current remote verification notes are in [Supabase verification](docs/SUPABASE_VERIFICATION.md).
@@ -163,9 +172,14 @@ The schema and private pet-avatar Storage setup live at:
 ```text
 supabase/migrations/0001_initial_schema.sql
 supabase/migrations/0002_pet_avatar_storage.sql
+supabase/migrations/0003_user_photo_upload_storage.sql
 ```
 
-They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and the private pet-avatar Storage bucket/policies.
+They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos.
+
+## Photo Upload Limits
+
+The current private photo upload supports JPEG, PNG, and WEBP images. Each file must be 10 MB or smaller, and each upload batch may contain up to 10 files. Uploaded photo objects are stored in the private `user-photos` bucket under an owner-scoped path like `<user-id>/<year>/<month>/<unique-file-name>`.
 
 ## Development Commands
 
@@ -194,8 +208,8 @@ Future tests should cover deeper server-action behavior and route behavior with 
 
 - Confirmed-account login requires completing email confirmation for a non-personal test user.
 - The initial database and pet-avatar Storage migrations have been applied to the linked Supabase project.
-- Dashboard pet data is real; photo, AI, weight, and health sections remain placeholders.
-- Pet profile avatars are implemented, but general photo upload, albums, weights, health records, and AI classification are not implemented yet.
+- Dashboard pet data is real; photo upload is implemented; full gallery, timeline, AI, weight, and health sections remain placeholders or planned actions.
+- Pet profile avatars and general private photo upload are implemented, but albums, weights, health records, and AI classification are not implemented yet.
 - Temporary Supabase Auth test users created during remote verification are not deleted because the app does not use a service-role key.
 - AI service does not exist yet.
 
@@ -207,6 +221,7 @@ Future tests should cover deeper server-action behavior and route behavior with 
 - Secret or service-role credentials must remain server-only because they can bypass normal Row Level Security.
 - RLS policies are designed so users can only access rows where `auth.uid()` matches ownership.
 - Pet avatars are stored in a private Supabase Storage bucket under `<user-id>/<pet-id>/...` paths. Storage policies restrict authenticated users to their own top-level folder, and pages render temporary signed URLs.
+- General photos are stored in a separate private `user-photos` bucket under `<user-id>/<year>/<month>/...` paths. The database stores object paths and metadata, not permanent public URLs.
 - Frontend filtering is not considered sufficient authorization.
 
 ## Roadmap

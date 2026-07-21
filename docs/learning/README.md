@@ -12,3 +12,4 @@ Each document explains a major engineering area in interview-friendly language:
 8. `08-simple-ui-and-accessibility.md`
 9. `09-pet-profile-crud.md`
 10. `10-pet-avatar-storage.md`
+11. `11-private-photo-upload.md`

@@ -55,4 +55,14 @@ The `pets.profile_photo_path` column stores only the object path, not a permanen
 
 Replacing an avatar is not a single database transaction because PostgreSQL and Storage are separate systems. The app uploads the new object first, updates the pet row only after upload succeeds, then best-effort removes the old object. If the database update fails, the newly uploaded object is removed best-effort. If old-object cleanup fails, the user-facing profile still points to the new valid object and an orphan can be cleaned later.
 
-General photo uploads, reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.
+## General Photo Uploads
+
+General photos use a separate private Supabase Storage bucket named `user-photos`. Object paths follow `<authenticated-user-id>/<year>/<month>/<unique-file-name>`.
+
+The upload page asks the server for signed upload requests. The server reads the current Supabase user, generates the owner-scoped path, and never trusts a browser-submitted `user_id`. The browser uploads directly to Storage with the signed upload token, then the server validates metadata and inserts a `photos` row for the authenticated user.
+
+PostgreSQL RLS protects `photos` rows by `user_id`. A database check also requires `storage_path` to begin with the row owner's ID. Storage policies separately protect file reads, writes, updates, and deletes by checking that the first folder in the object path matches `auth.uid()`.
+
+The app stores object paths, not permanent public URLs. If Storage succeeds but metadata insertion fails, the server performs best-effort cleanup of the uploaded object.
+
+Reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.

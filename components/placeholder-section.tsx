@@ -36,7 +36,8 @@ export function PlaceholderSection({
       </div>
       <div className="placeholder-empty">
         <div className="empty-state text-sm">
-          No data is shown because this feature is not implemented in Phase 1A.
+          No data is shown because this feature is not implemented in the
+          current phase.
         </div>
       </div>
     </Card>

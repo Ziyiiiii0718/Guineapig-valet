@@ -8,6 +8,7 @@ Browser
 -> Supabase Auth
 -> PostgreSQL with Row Level Security
 -> Supabase Storage for private pet avatars
+-> Supabase Storage for private general photos
 ```
 
 The browser renders the landing, auth, and dashboard pages. Next.js handles route structure, server actions, server-side session checks, and UI rendering. Supabase Auth manages credentials and sessions. PostgreSQL stores application data and Row Level Security protects user-owned rows.
@@ -36,7 +37,12 @@ User submits credentials
 - `app/pets/[id]/edit/page.tsx`: private pet editing form.
 - `app/actions/auth.ts`: server actions for login, registration, logout.
 - `app/actions/pets.ts`: server actions for pet create, update, delete, avatar upload, avatar replacement, and avatar removal.
+- `app/actions/photos.ts`: server actions for signed photo-upload requests and metadata finalization.
+- `app/photos/upload/page.tsx`: authenticated private photo upload page.
+- `components/photos/photo-upload-form.tsx`: selected-file review, direct Storage upload, per-file status, and retry UI.
 - `components/pets/pet-avatar-form.tsx`: edit-page avatar upload and removal UI.
+- `lib/photos/upload.ts`: shared photo upload limits, file validation, path helpers, and metadata validation.
+- `lib/photos/exif.ts`: browser-safe EXIF taken-date parsing and fallback helpers.
 - `lib/pets/avatar.ts`: avatar file validation and ownership-scoped Storage path helpers.
 - `lib/pets/avatar-urls.ts`: server-only signed URL generation for private avatars.
 - `proxy.ts`: session refresh and route protection when Supabase is configured.
@@ -47,6 +53,7 @@ User submits credentials
 - `lib/env.ts`: environment-variable validation.
 - `supabase/migrations/0001_initial_schema.sql`: relational schema and RLS.
 - `supabase/migrations/0002_pet_avatar_storage.sql`: private avatar bucket and Storage policies.
+- `supabase/migrations/0003_user_photo_upload_storage.sql`: private general-photo bucket, Storage policies, and photo metadata refinements.
 
 ## Pet Avatar Storage Flow
 
@@ -60,6 +67,20 @@ Edit pet page
 ```
 
 Profile avatars are intentionally separate from general photo upload and future AI reference photos. Replacing an avatar uploads the new object first, updates the pet row only after upload succeeds, then best-effort removes the old object. PostgreSQL and Storage do not share one transaction, so cleanup is designed to be safe if a later step fails.
+
+## Private General Photo Upload Flow
+
+```text
+Upload page
+-> browser validates and previews selected files
+-> Server Action checks current Supabase user
+-> Server Action creates signed upload requests for user-photos/<user-id>/<year>/<month>/...
+-> browser uploads directly to the private user-photos bucket
+-> Server Action validates metadata and inserts photos row
+-> if metadata insert fails, Server Action best-effort removes the Storage object
+```
+
+General photos use a separate private `user-photos` bucket. The database stores the object path and metadata, not public URLs. The initial `ai_status` is `uploaded`, which means the image has not been analyzed or classified. Direct browser upload keeps large image bytes out of Next.js server actions, which is better suited to serverless deployment. The trade-off is that Storage and PostgreSQL do not share a transaction, so cleanup after partial failure is best effort.
 
 ## Future AI Boundary
 

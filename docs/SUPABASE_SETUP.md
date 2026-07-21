@@ -40,7 +40,7 @@ Safest dashboard path for the initial database schema:
 4. Run it once against the intended project.
 5. Do not run destructive reset commands.
 
-The project also includes `supabase/migrations/0002_pet_avatar_storage.sql`, which creates the private `pet-avatars` bucket and ownership-scoped Storage policies. Prefer applying this through the linked CLI migration workflow so local and remote migration history stay aligned.
+The project also includes `supabase/migrations/0002_pet_avatar_storage.sql`, which creates the private `pet-avatars` bucket and ownership-scoped Storage policies. `supabase/migrations/0003_user_photo_upload_storage.sql` creates the private `user-photos` bucket, ownership-scoped Storage policies, and photo metadata refinements for general uploads. Prefer applying these through the linked CLI migration workflow so local and remote migration history stay aligned.
 
 CLI path, only if the Supabase CLI is installed and authenticated:
 
@@ -65,7 +65,8 @@ After applying the migration:
 6. Confirm User B cannot select, update, or delete User A's row.
 7. Confirm User A cannot insert a row with User B's `user_id`.
 8. Confirm the `pet-avatars` bucket is private, limited to JPEG/PNG/WEBP, and has a 5 MB size limit.
-9. Confirm Storage policies allow users to access only their own top-level object folder.
-10. Remove temporary test data only when safe.
+9. Confirm the `user-photos` bucket is private, limited to JPEG/PNG/WEBP, and has a 10 MB size limit.
+10. Confirm Storage policies allow users to access only their own top-level object folder.
+11. Remove temporary test data only when safe.
 
 The application must not rely on browser-submitted ownership IDs alone.

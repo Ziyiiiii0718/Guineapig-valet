@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { getPublicEnvStatus, getSupabasePublicConfig } from "@/lib/env";
 
 describe("environment validation", () => {
@@ -43,5 +44,21 @@ describe("environment validation", () => {
     expect(() => getSupabasePublicConfig({})).toThrow(
       "Missing Supabase environment variables",
     );
+  });
+
+  it("keeps browser Supabase config on static NEXT_PUBLIC references", () => {
+    const clientEnvSource = readFileSync("lib/env-client.ts", "utf8");
+    const browserClientSource = readFileSync("lib/supabase/client.ts", "utf8");
+
+    expect(clientEnvSource).toContain("process.env.NEXT_PUBLIC_SUPABASE_URL");
+    expect(clientEnvSource).toContain(
+      "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    );
+    expect(clientEnvSource).toContain(
+      "process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    );
+    expect(clientEnvSource).not.toContain("process.env[");
+    expect(browserClientSource).not.toContain('from "@/lib/env"');
+    expect(browserClientSource).not.toContain("from '@/lib/env'");
   });
 });

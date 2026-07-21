@@ -46,21 +46,21 @@ Completion criteria: Users can only see and modify their own pets.
 
 Objective: Allow users to upload private photos safely.
 
-Major features: upload form, metadata extraction planning, storage paths, signed access.
+Major features: upload form, selected-file review, direct browser upload, metadata extraction, storage paths, signed upload access.
 
 Dependencies: Supabase Storage bucket, photos table.
 
-Expected database changes: Storage policy alignment, photo metadata refinements.
+Expected database changes: `user-photos` private bucket, Storage policy alignment, photo metadata refinements.
 
-Expected API or server actions: Upload, metadata insert, delete.
+Expected API or server actions: signed upload request initialization, metadata insert, best-effort cleanup.
 
-Expected UI pages: upload page, recent photos placeholder becomes real.
+Expected UI pages: `/photos/upload`, dashboard upload entry point, recent photos placeholder remains honest.
 
 Testing strategy: File validation tests, storage integration test with test credentials.
 
 Learning-document topics: private storage, file validation, signed URLs.
 
-Completion criteria: A user can upload and view only their own photos.
+Completion criteria: A user can upload private photo files into their own Storage folder and create only their own photo metadata rows. Full gallery viewing remains a later phase.
 
 ## Phase 4: Photo Gallery and Timeline
 
