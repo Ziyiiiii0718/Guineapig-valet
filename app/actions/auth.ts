@@ -13,6 +13,18 @@ function redirectWithAuthError(
   redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
+function getAuthCallbackOrigin(originHeader: string | null) {
+  if (originHeader) {
+    return originHeader;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  return "http://localhost:3000";
+}
+
 export async function signInAction(formData: FormData) {
   const parsed = authFormSchema.safeParse(Object.fromEntries(formData));
 
@@ -58,7 +70,7 @@ export async function signUpAction(formData: FormData) {
   }
 
   const requestHeaders = await headers();
-  const origin = requestHeaders.get("origin") ?? "http://localhost:3000";
+  const origin = getAuthCallbackOrigin(requestHeaders.get("origin"));
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,

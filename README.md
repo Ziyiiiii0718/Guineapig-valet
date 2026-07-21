@@ -139,6 +139,23 @@ Do not put Supabase secret keys or service-role keys in `NEXT_PUBLIC_` variables
 Detailed setup and verification steps are in [Supabase setup](docs/SUPABASE_SETUP.md).
 Current remote verification notes are in [Supabase verification](docs/SUPABASE_VERIFICATION.md).
 
+## First Vercel Deployment
+
+Set these Vercel environment variables before the first deployment:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+
+Do not add a Supabase service-role key or database password to Vercel for the current app. The browser and server clients both use the client-safe Publishable key together with Supabase Auth cookies and RLS.
+
+After Vercel creates the deployment URL, add the deployed callback URL to Supabase Authentication redirect URLs:
+
+```text
+https://your-vercel-domain.vercel.app/auth/callback
+```
+
+Before a public production launch, re-enable email confirmation and configure custom SMTP in Supabase Auth. The default shared Supabase email provider can hit rate limits during testing.
+
 ## Database Migration
 
 The schema and private pet-avatar Storage setup live at:
