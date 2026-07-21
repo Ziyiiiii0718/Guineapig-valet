@@ -32,13 +32,15 @@ Before production:
 
 ## Migration Options
 
-Safest dashboard path:
+Safest dashboard path for the initial database schema:
 
 1. Open the Supabase SQL Editor.
 2. Copy the SQL from `supabase/migrations/0001_initial_schema.sql`.
 3. Review that it creates extensions, tables, indexes, RLS, and policies.
 4. Run it once against the intended project.
 5. Do not run destructive reset commands.
+
+The project also includes `supabase/migrations/0002_pet_avatar_storage.sql`, which creates the private `pet-avatars` bucket and ownership-scoped Storage policies. Prefer applying this through the linked CLI migration workflow so local and remote migration history stay aligned.
 
 CLI path, only if the Supabase CLI is installed and authenticated:
 
@@ -62,6 +64,8 @@ After applying the migration:
 5. Create a pet row as User A.
 6. Confirm User B cannot select, update, or delete User A's row.
 7. Confirm User A cannot insert a row with User B's `user_id`.
-8. Remove temporary test data only when safe.
+8. Confirm the `pet-avatars` bucket is private, limited to JPEG/PNG/WEBP, and has a 5 MB size limit.
+9. Confirm Storage policies allow users to access only their own top-level object folder.
+10. Remove temporary test data only when safe.
 
 The application must not rely on browser-submitted ownership IDs alone.

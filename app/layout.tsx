@@ -53,8 +53,8 @@ export default function RootLayout({
           <Link href="/" className="link-primary">
             PiggieVault
           </Link>{" "}
-          is in Phase 1A: authentication-ready foundation and placeholder
-          dashboard.
+          is in Phase 1B: authenticated pet profiles are live; photos, AI,
+          weight, and health remain planned.
         </footer>
       </body>
     </html>

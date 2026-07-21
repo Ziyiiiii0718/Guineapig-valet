@@ -29,6 +29,12 @@ Both matter. A user should not be able to insert a pet row for another `user_id`
 
 Frontend filtering can be bypassed by direct HTTP requests or browser tooling. RLS keeps the database from returning another user's private data even if application code has a bug.
 
+## Pet Profile Mutations
+
+Phase 1B pet-profile create, update, and delete actions check authentication inside each Server Action. The browser never submits a trusted `user_id`; create actions assign ownership from the authenticated Supabase user. Update and delete actions query and mutate with both pet ID and authenticated owner ID, while RLS remains enabled as defense in depth.
+
+Missing and unauthorized pet IDs intentionally return the same safe not-found style behavior so the app does not reveal whether another user's private pet exists.
+
 ## Service Role
 
 The Supabase service-role key can bypass normal RLS behavior. This Phase 1A application does not require it. If a future maintenance script needs it, the key must be used only in trusted server contexts for carefully scoped operations. It must never be imported into client components or exposed in public environment variables.
@@ -41,4 +47,12 @@ The app also accepts the legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` environment vari
 
 ## Private Storage
 
-Photo storage will use private buckets and signed access or server-mediated reads in a later phase. Storage paths should include ownership-aware structure, and database rows should still be protected by RLS.
+Pet profile avatars use a private Supabase Storage bucket named `pet-avatars`. Object paths follow `<authenticated-user-id>/<pet-id>/<unique-file-name>`.
+
+Storage policies on `storage.objects` allow authenticated users to select, insert, update, and delete only objects whose first path folder matches `auth.uid()`. The application also checks the current Supabase user and pet ownership before uploading, replacing, removing, or cleaning up an avatar.
+
+The `pets.profile_photo_path` column stores only the object path, not a permanent URL. Server Components create short-lived signed URLs for rendering avatars on the dashboard, pet list, pet detail, and pet edit pages.
+
+Replacing an avatar is not a single database transaction because PostgreSQL and Storage are separate systems. The app uploads the new object first, updates the pet row only after upload succeeds, then best-effort removes the old object. If the database update fails, the newly uploaded object is removed best-effort. If old-object cleanup fails, the user-facing profile still points to the new valid object and an orphan can be cleaned later.
+
+General photo uploads, reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.

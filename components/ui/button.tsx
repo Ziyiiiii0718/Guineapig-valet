@@ -4,6 +4,7 @@ import type {
   ButtonHTMLAttributes,
   ReactNode,
 } from "react";
+import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -19,20 +20,21 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
 };
 
-export function Button({
-  variant = "primary",
-  className,
-  type = "button",
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn("btn focus-ring", variantClasses[variant], className)}
-      {...props}
-    />
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { variant = "primary", className, type = "button", ...props },
+    ref,
+  ) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={cn("btn focus-ring", variantClasses[variant], className)}
+        {...props}
+      />
+    );
+  },
+);
 
 type ButtonLinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
   href: string;

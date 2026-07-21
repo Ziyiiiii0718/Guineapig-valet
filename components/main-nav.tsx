@@ -7,6 +7,7 @@ import { PageContainer } from "@/components/ui/page-container";
 const links = [
   { href: "/", label: "Home" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/pets", label: "Pets" },
   { href: "/login", label: "Log in" },
   { href: "/register", label: "Register" },
 ];

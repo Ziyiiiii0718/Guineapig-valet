@@ -1,6 +1,6 @@
 # Supabase Verification
 
-Last verified: 2026-07-19
+Last verified: 2026-07-20
 
 Project ref: `urhwguxmvpxhlmgudrkm`
 
@@ -19,14 +19,17 @@ No `.env.local` values, publishable key values, secret keys, or service-role key
 
 ## Migration Status
 
-Applied migration:
+Applied migrations:
 
 - `supabase/migrations/0001_initial_schema.sql`
+- `supabase/migrations/0002_pet_avatar_storage.sql`
 
 Remote migration status after `db push`:
 
 - local `0001`
 - remote `0001`
+- local `0002`
+- remote `0002`
 
 No remote database reset command was run.
 
@@ -75,6 +78,30 @@ RLS verified:
 - Policies reference `auth.uid()`.
 - Anonymous insert into `pets` while claiming a `user_id` was rejected.
 - Simulated authenticated own-row insert into `pets` succeeded inside a transaction and was rolled back.
+- Two-user runtime RLS checks confirmed User A could create, read, update, and delete User A's pet while User B could not read, update, delete, or spoof ownership for that pet.
+
+## Storage Verified
+
+Private pet avatar Storage verified:
+
+- Bucket `pet-avatars` exists.
+- Bucket is private.
+- Bucket file size limit is 5 MB.
+- Allowed MIME types are `image/jpeg`, `image/png`, and `image/webp`.
+- Storage policies exist for select, insert, update, and delete on own pet-avatar objects.
+
+Runtime Storage checks with two non-personal authenticated users confirmed:
+
+- User A could upload an avatar under User A's top-level folder.
+- User A could store the object path in `pets.profile_photo_path`.
+- User A could create a signed URL for the avatar.
+- User B could not download User A's avatar.
+- User B could not upload into User A's top-level folder.
+- The bucket rejected `text/plain`.
+- User B could upload into User B's own top-level folder.
+- User B could not delete User A's avatar.
+- User A could remove User A's avatar.
+- Temporary avatar objects and the temporary pet row were cleaned up where permitted.
 
 ## Authentication Verified
 
@@ -106,9 +133,8 @@ Production requirement:
 Not fully verified yet:
 
 - Production-style email confirmation with custom SMTP.
-- Full two-user RLS isolation.
 
-The remaining blocker is custom SMTP plus two confirmed non-personal test users.
+The remaining blocker is custom SMTP plus production-style confirmed-email registration.
 
 ## Remaining Manual Verification
 
@@ -122,5 +148,5 @@ To finish the production auth and two-user checks:
 6. Confirm `/dashboard` renders the authenticated dashboard.
 7. Log out and confirm the session clears.
 8. Log in as User B.
-9. Confirm User B cannot select, update, or delete User A's rows.
+9. Re-run two-user row and Storage checks with confirmed-email users.
 10. Clean up temporary test data where safe.

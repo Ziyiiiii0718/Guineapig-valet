@@ -43,7 +43,7 @@ Reliable multi-pet detection is a future enhancement.
 ## Deletion Behavior
 
 - User account deleted: owned rows cascade because they are private user data.
-- Pet deleted: dependent reference photos, weight records, and health records cascade. Photo records remain because a general photo library may outlive one pet profile; predictions referencing the pet set `pet_id` to null.
+- Pet deleted: dependent reference photos, weight records, and health records cascade. Photo records remain because a general photo library may outlive one pet profile; predictions referencing the pet set `pet_id` to null. The application performs best-effort cleanup of the pet avatar Storage object.
 - Photo deleted: predictions and album relationships cascade. Storage object deletion must be handled by application/storage logic.
 - Album deleted: album-photo relationships cascade, but original photos remain.
 - Reference photo deleted: the reference row cascades with the pet or can be deleted directly; future storage cleanup should remove or retire the related object.
@@ -54,4 +54,7 @@ Indexes prioritize ownership and common list views: pets by user, photos by user
 
 ## Migration
 
-See `supabase/migrations/0001_initial_schema.sql`.
+See:
+
+- `supabase/migrations/0001_initial_schema.sql`
+- `supabase/migrations/0002_pet_avatar_storage.sql`

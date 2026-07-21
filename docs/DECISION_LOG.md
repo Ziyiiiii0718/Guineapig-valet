@@ -83,3 +83,17 @@ Alternatives: Keep only the anon-key name; rename everything and drop fallback.
 Consequences: The environment helper has compatibility logic, and docs must explain which variable new setups should use.
 
 Can revisit: Yes, after confirming all local and deployed environments have migrated.
+
+## Decision 7: Pet Avatars Use a Private Storage Bucket Before General Photo Upload
+
+Original ambiguity: Profile photos are image uploads, but the broader requirements also include reference photos, general galleries, AI classification, and albums.
+
+Chosen decision: Implement only pet profile avatars in this phase, using a private `pet-avatars` bucket and the existing `pets.profile_photo_path` field. General photo upload and AI reference-photo storage remain future work.
+
+Why: A profile avatar is a focused improvement to pet CRUD. It proves private Storage, signed URL rendering, file validation, and cleanup behavior without starting the full photo pipeline.
+
+Alternatives: Make avatars public; store permanent signed URLs; implement the full gallery/upload system now.
+
+Consequences: The app stores object paths rather than URLs, creates signed URLs at render time, and must handle best-effort cleanup because PostgreSQL and Storage do not share one transaction.
+
+Can revisit: Yes, when general photo storage and reference-photo workflows are designed.

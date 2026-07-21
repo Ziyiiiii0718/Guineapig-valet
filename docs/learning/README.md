@@ -10,3 +10,5 @@ Each document explains a major engineering area in interview-friendly language:
 6. `06-environment-variables-and-secrets.md`
 7. `07-git-repository-foundation.md`
 8. `08-simple-ui-and-accessibility.md`
+9. `09-pet-profile-crud.md`
+10. `10-pet-avatar-storage.md`
