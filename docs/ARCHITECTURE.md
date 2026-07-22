@@ -38,11 +38,17 @@ User submits credentials
 - `app/actions/auth.ts`: server actions for login, registration, logout.
 - `app/actions/pets.ts`: server actions for pet create, update, delete, avatar upload, avatar replacement, and avatar removal.
 - `app/actions/photos.ts`: server actions for signed photo-upload requests and metadata finalization.
+- `app/photos/page.tsx`: authenticated private photo gallery with sorting, pagination, and timeline grouping.
+- `app/photos/[id]/page.tsx`: authenticated private photo detail page.
 - `app/photos/upload/page.tsx`: authenticated private photo upload page.
+- `components/photos/delete-photo-form.tsx`: accessible confirmation dialog for permanent photo deletion.
+- `components/photos/photo-card.tsx`: signed-image gallery card component.
 - `components/photos/photo-upload-form.tsx`: selected-file review, direct Storage upload, per-file status, and retry UI.
 - `components/pets/pet-avatar-form.tsx`: edit-page avatar upload and removal UI.
 - `lib/photos/upload.ts`: shared photo upload limits, file validation, path helpers, and metadata validation.
 - `lib/photos/exif.ts`: browser-safe EXIF taken-date parsing and fallback helpers.
+- `lib/photos/gallery.ts`: display-date fallback, sort parsing, timeline grouping, pagination, and formatting helpers.
+- `lib/photos/queries.ts`: server-only photo queries and signed URL generation.
 - `lib/pets/avatar.ts`: avatar file validation and ownership-scoped Storage path helpers.
 - `lib/pets/avatar-urls.ts`: server-only signed URL generation for private avatars.
 - `proxy.ts`: session refresh and route protection when Supabase is configured.
@@ -81,6 +87,34 @@ Upload page
 ```
 
 General photos use a separate private `user-photos` bucket. The database stores the object path and metadata, not public URLs. The initial `ai_status` is `uploaded`, which means the image has not been analyzed or classified. Direct browser upload keeps large image bytes out of Next.js server actions, which is better suited to serverless deployment. The trade-off is that Storage and PostgreSQL do not share a transaction, so cleanup after partial failure is best effort.
+
+## Private Gallery and Timeline Flow
+
+```text
+Gallery or detail request
+-> Server Component checks current Supabase user
+-> query photos with id and authenticated user_id
+-> RLS independently restricts rows to auth.uid()
+-> server validates the Storage path begins with the same user id
+-> server creates short-lived signed URLs for the current result set
+-> UI renders private thumbnails/detail image without storing signed URLs
+```
+
+The gallery uses a UTC display date: `taken_at` when present, otherwise `uploaded_at`, otherwise `created_at`. That display date drives labels, month grouping, and helper-level sorting. The current database query orders by the stored timestamp columns plus `id` and only reads one page at a time; Phase 2A uploads always save `taken_at` with either EXIF time or upload time, so current rows sort predictably. If older imported rows become common, a future migration can add a generated display-date column for database-native ordering.
+
+## Photo Deletion Flow
+
+```text
+Detail page
+-> user confirms deletion in a dialog
+-> Server Action verifies current Supabase user
+-> query photo by id and authenticated user_id
+-> delete Storage object using the database-owned path
+-> delete photos row
+-> revalidate dashboard, gallery, and detail routes
+```
+
+Deletion removes the Storage object first, then the metadata row. This avoids a misleading success state where the row is gone but the private image remains. The trade-off is that if the later row deletion fails, the app reports that partial failure and leaves a broken metadata row for retry or maintenance cleanup.
 
 ## Future AI Boundary
 

@@ -53,8 +53,9 @@ export default function RootLayout({
           <Link href="/" className="link-primary">
             PiggieVault
           </Link>{" "}
-          has authenticated pet profiles, private avatars, and private photo
-          upload live; gallery, AI, weight, and health remain planned.
+          has authenticated pet profiles, private avatars, private photo upload,
+          and private gallery browsing live; AI, weight, and health remain
+          planned.
         </footer>
       </body>
     </html>

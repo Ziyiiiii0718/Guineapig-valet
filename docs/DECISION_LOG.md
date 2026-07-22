@@ -125,3 +125,45 @@ Alternatives: Reuse `needs_review`; add a processing queue status now.
 Consequences: Future AI phases can transition photos from `uploaded` into review or classification states without pretending analysis has already happened.
 
 Can revisit: Yes, when the AI job pipeline is designed.
+
+## Decision 10: Private Gallery Uses Temporary Signed URLs Per Page
+
+Original ambiguity: A private gallery needs images in the browser, but the Storage bucket must remain private.
+
+Chosen decision: Keep `user-photos` private and create short-lived signed URLs on the server for only the currently authorized gallery/detail result set.
+
+Why: Signed URLs let the browser render private images without exposing a service-role key or making the bucket public.
+
+Alternatives: Make Storage public; proxy every image through Next.js; store signed URLs in PostgreSQL.
+
+Consequences: Expired images may require a page refresh, and gallery pages should avoid generating URLs for unlimited rows.
+
+Can revisit: Yes, if a dedicated authenticated image proxy or thumbnail service is added.
+
+## Decision 11: Timeline Dates Use UTC Display-Date Fallbacks
+
+Original ambiguity: EXIF timestamps, upload timestamps, and created timestamps can disagree or be absent.
+
+Chosen decision: Use `taken_at`, then `uploaded_at`, then `created_at`, and format/group dates as UTC calendar dates.
+
+Why: UTC grouping avoids local timezone shifts where the same image appears in different months for different users or environments.
+
+Alternatives: Use local browser dates; use upload date only; require EXIF dates.
+
+Consequences: Calendar labels are stable but may differ from a user's local wall-clock date near midnight UTC.
+
+Can revisit: Yes, if PiggieVault later adds explicit user timezone preferences.
+
+## Decision 12: Photo Deletion Removes Storage Before Metadata
+
+Original ambiguity: Deleting a photo touches Supabase Storage and PostgreSQL, which cannot share one transaction.
+
+Chosen decision: Delete the private Storage object first, then delete the `photos` row.
+
+Why: It avoids leaving private image files behind when the user believes the photo was removed.
+
+Alternatives: Delete the database row first; soft-delete rows and clean Storage asynchronously.
+
+Consequences: A database deletion failure after Storage deletion can leave metadata pointing at a missing object, so the app reports that partial failure honestly.
+
+Can revisit: Yes, if a background cleanup job or soft-delete workflow is introduced.

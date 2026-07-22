@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getPublicEnvStatus } from "@/lib/env";
+import { photoIdSchema } from "@/lib/photos/gallery";
 import {
   buildUserPhotoPath,
   categorizeStoragePreparationError,
@@ -46,6 +48,11 @@ export type PhotoUploadFinalizeResult = {
   message: string;
   photoId?: string;
   status: "uploaded" | "failed";
+};
+
+export type PhotoDeleteActionState = {
+  message?: string;
+  status: "idle" | "error";
 };
 
 function logPhotoUploadPreparationFailure({
@@ -269,6 +276,7 @@ export async function finalizePhotoUploadAction(
 
   revalidatePath("/dashboard");
   revalidatePath("/photos/upload");
+  revalidatePath("/photos");
 
   return {
     clientId: input.clientId,
@@ -276,4 +284,91 @@ export async function finalizePhotoUploadAction(
     photoId: data.id,
     status: "uploaded",
   };
+}
+
+export async function deletePhotoAction(
+  _previousState: PhotoDeleteActionState,
+  formData: FormData,
+): Promise<PhotoDeleteActionState> {
+  const photoId = String(formData.get("photoId") ?? "");
+  const parsedPhotoId = photoIdSchema.safeParse(photoId);
+
+  if (!parsedPhotoId.success) {
+    return {
+      message: "We could not find that photo.",
+      status: "error",
+    };
+  }
+
+  const {
+    error: authError,
+    supabase,
+    user,
+  } = await getAuthenticatedPhotoUser();
+
+  if (authError || !supabase || !user) {
+    return {
+      message: authError ?? "Please log in to manage photos.",
+      status: "error",
+    };
+  }
+
+  const { data: photo, error: readError } = await supabase
+    .from("photos")
+    .select("id,file_name,storage_path,user_id")
+    .eq("id", parsedPhotoId.data)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    readError ||
+    !photo ||
+    !isUserPhotoPathForUser(photo.storage_path, user.id)
+  ) {
+    return {
+      message: "We could not find that photo.",
+      status: "error",
+    };
+  }
+
+  const { error: storageError } = await supabase.storage
+    .from(USER_PHOTO_BUCKET)
+    .remove([photo.storage_path]);
+
+  if (storageError) {
+    console.warn("[photo-gallery]", {
+      category: "DELETE_STORAGE_FAILED",
+      photoId: parsedPhotoId.data,
+    });
+
+    return {
+      message:
+        "We could not remove the private image file, so the photo was not deleted. Please try again.",
+      status: "error",
+    };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("photos")
+    .delete()
+    .eq("id", parsedPhotoId.data)
+    .eq("user_id", user.id);
+
+  if (deleteError) {
+    console.warn("[photo-gallery]", {
+      category: "DELETE_METADATA_FAILED",
+      photoId: parsedPhotoId.data,
+    });
+
+    return {
+      message:
+        "The private image file was removed, but we could not remove the photo record. Please try again.",
+      status: "error",
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/photos");
+  revalidatePath(`/photos/${parsedPhotoId.data}`);
+  redirect("/photos?message=deleted");
 }

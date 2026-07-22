@@ -28,12 +28,12 @@ export default async function PhotoUploadPage() {
           <p className="section-kicker">Private photo upload</p>
           <h1 className="heading-page mt-2">Upload guinea pig photos</h1>
           <p className="text-secondary mt-2 max-w-2xl text-sm leading-6">
-            Add one or more private photos to your account. Gallery browsing,
-            albums, pet labels, and AI review remain planned for later phases.
+            Add one or more private photos to your account. Albums, pet labels,
+            and AI review remain planned for later phases.
           </p>
         </div>
-        <ButtonLink href="/dashboard" variant="secondary">
-          Back to Dashboard
+        <ButtonLink href="/photos" variant="secondary">
+          View gallery
         </ButtonLink>
       </div>
 

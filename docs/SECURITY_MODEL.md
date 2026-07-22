@@ -65,4 +65,16 @@ PostgreSQL RLS protects `photos` rows by `user_id`. A database check also requir
 
 The app stores object paths, not permanent public URLs. If Storage succeeds but metadata insertion fails, the server performs best-effort cleanup of the uploaded object.
 
+## Private Photo Browsing
+
+Gallery and detail pages are Server Components. They derive the current user from Supabase Auth cookies, query `photos` with the authenticated `user_id`, and rely on RLS as defense in depth. A guessed photo ID for another account returns the same safe not-found behavior as a missing photo.
+
+The `user-photos` bucket remains private. The server creates short-lived signed URLs only for rows already authorized for the current user and only after confirming that the object path starts with that user's ID. Signed URLs are sent to the browser for rendering but are not logged, stored in PostgreSQL, or made permanent.
+
+## Private Photo Deletion
+
+Photo deletion never trusts a browser-submitted Storage path. The Server Action receives only a photo ID, verifies the current user, reads the row by `id` and `user_id`, checks the owner-prefixed path, deletes the private Storage object, then deletes the PostgreSQL row.
+
+The app deletes Storage first because an orphaned private object is harder for a user to notice than a failed metadata deletion. If Storage deletion fails, the row is kept. If row deletion fails after Storage succeeds, the app reports a partial failure and leaves a metadata record that can be retried or cleaned up later.
+
 Reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { logoutAction } from "@/app/actions/auth";
 import { ConfigNotice } from "@/components/config-notice";
 import { PetAvatar } from "@/components/pets/pet-avatar";
+import { PhotoCard } from "@/components/photos/photo-card";
 import { PlaceholderSection } from "@/components/placeholder-section";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,8 @@ import { formatPetAge } from "@/lib/pets/age";
 import type { PetWithAvatarUrl } from "@/lib/pets/avatar-urls";
 import { listPetsForUser } from "@/lib/pets/queries";
 import { formatPetSex } from "@/lib/pets/view";
+import type { PhotoWithSignedUrl } from "@/lib/photos/queries";
+import { listRecentPhotosForDashboard } from "@/lib/photos/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const sections = [
@@ -106,34 +109,55 @@ function DashboardPetSummary({
   );
 }
 
-function RecentPhotosUploadCard() {
+function RecentPhotosCard({
+  error,
+  photos,
+}: {
+  error: unknown;
+  photos: PhotoWithSignedUrl[];
+}) {
   return (
-    <Card className="placeholder-card">
-      <div className="placeholder-top">
-        <div className="min-w-0">
-          <div className="placeholder-title-row">
-            <span
-              className="placeholder-icon placeholder-icon-olive"
-              aria-hidden="true"
-            />
-            <h2 className="heading-section text-lg">Recent photos</h2>
+    <Card>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="heading-section">Recent photos</h2>
+            <Badge tone={photos.length > 0 ? "success" : "neutral"}>
+              {photos.length > 0 ? "Private" : "Empty"}
+            </Badge>
           </div>
-          <p className="text-secondary mt-3 text-sm leading-6">
-            Private upload is available now. Gallery browsing and timeline views
-            are still planned for the next photo phase.
+          <p className="text-secondary mt-2 text-sm leading-6">
+            Your newest uploaded photos from the private `user-photos` bucket.
           </p>
         </div>
-        <Badge tone="success">Upload live</Badge>
-      </div>
-      <div className="placeholder-empty">
-        <div className="empty-state text-sm">
-          No gallery is shown yet. Upload photos now, then browse them in a
-          later gallery phase.
-        </div>
-        <div className="mt-4">
+        <div className="flex flex-wrap gap-2">
+          <ButtonLink href="/photos" variant="secondary">
+            View all photos
+          </ButtonLink>
           <ButtonLink href="/photos/upload">Upload photos</ButtonLink>
         </div>
       </div>
+
+      {error ? (
+        <Alert tone="error" role="alert" className="mt-5 text-sm">
+          We could not load recent photos. Please try again.
+        </Alert>
+      ) : null}
+
+      {!error && photos.length === 0 ? (
+        <div className="empty-state mt-5 text-sm">
+          No photos uploaded yet. Upload private images to see recent previews
+          here.
+        </div>
+      ) : null}
+
+      {!error && photos.length > 0 ? (
+        <div className="dashboard-photo-grid mt-5">
+          {photos.map((photo, index) => (
+            <PhotoCard key={photo.id} photo={photo} priority={index === 0} />
+          ))}
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -164,7 +188,10 @@ export default async function DashboardPage() {
     );
   }
 
-  const petSummary = await listPetsForUser(user.id);
+  const [petSummary, recentPhotos] = await Promise.all([
+    listPetsForUser(user.id),
+    listRecentPhotosForDashboard(user.id),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -172,8 +199,8 @@ export default async function DashboardPage() {
         <div className="relative z-10">
           <h1 className="heading-page">Dashboard</h1>
           <p className="text-secondary mt-2 text-sm">
-            Signed in as {user.email}. Pet profiles and private photo upload are
-            live; galleries, AI, weight, and health remain planned.
+            Signed in as {user.email}. Pet profiles, private photo upload, and
+            gallery browsing are live; AI, weight, and health remain planned.
           </p>
         </div>
         <form action={logoutAction} className="relative z-10">
@@ -188,7 +215,10 @@ export default async function DashboardPage() {
           error={petSummary.error}
           pets={petSummary.pets}
         />
-        <RecentPhotosUploadCard />
+        <RecentPhotosCard
+          error={recentPhotos.error}
+          photos={recentPhotos.photos}
+        />
         {sections.map((section) => (
           <PlaceholderSection
             key={section.title}

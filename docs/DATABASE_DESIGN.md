@@ -50,7 +50,7 @@ Reliable multi-pet detection is a future enhancement.
 
 ## Indexing
 
-Indexes prioritize ownership and common list views: pets by user, photos by user and date, album contents, and pet-specific health/weight histories.
+Indexes prioritize ownership and common list views: pets by user, photos by user and date, album contents, and pet-specific health/weight histories. The gallery reads one page at a time and uses a deterministic secondary order by photo ID so equal timestamps do not duplicate or skip rows between pages.
 
 ## Migration
 
@@ -64,4 +64,18 @@ See:
 
 General photo upload stores files in the private `user-photos` bucket and saves the object path in `photos.storage_path`. The object path must start with the same `user_id` as the row. This gives PostgreSQL a database-level check that matches the Storage policy convention.
 
-The current upload phase saves `mime_type` for new uploads and sets `ai_status` to `uploaded`. That status means the file was received but has not been classified by AI. Gallery browsing, albums, and AI prediction rows remain planned for later phases.
+The current upload phase saves `mime_type` for new uploads and sets `ai_status` to `uploaded`. That status means the file was received but has not been classified by AI.
+
+## Current Photo Gallery Metadata
+
+The gallery and detail pages query `photos` rows by both authenticated `user_id` and photo ID where applicable. RLS remains enabled, so the database still refuses cross-user access if the application query is accidentally loosened.
+
+Gallery display dates use a typed application helper:
+
+1. `taken_at` when present;
+2. `uploaded_at` when `taken_at` is absent;
+3. `created_at` as a final fallback.
+
+Dates are formatted as UTC calendar dates for stable month grouping. Signed URLs are generated at render time from `storage_path` and are never stored in database columns.
+
+Photo deletion is split across Storage and PostgreSQL because they are separate systems. The app deletes the private Storage object first, then the `photos` row. This favors not leaving private image files behind, while reporting a partial failure if metadata deletion fails afterward.

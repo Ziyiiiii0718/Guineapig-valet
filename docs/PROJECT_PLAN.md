@@ -66,21 +66,21 @@ Completion criteria: A user can upload private photo files into their own Storag
 
 Objective: Browse private photos chronologically.
 
-Major features: gallery grid, date sorting, empty/error/loading states.
+Major features: gallery grid, date sorting, month/year timeline grouping, page-based pagination, private photo detail, safe deletion, dashboard recent-photo previews, empty/error/loading states.
 
 Dependencies: Phase 3 photos.
 
-Expected database changes: Indexes for taken/uploaded dates.
+Expected database changes: Existing photo date index is used for current uploads; a generated display-date column can be considered later if imported legacy rows with missing `taken_at` become common.
 
-Expected API or server actions: Photo list queries.
+Expected API or server actions: Photo list/detail queries, signed URL generation, photo deletion.
 
-Expected UI pages: `/photos`, photo detail.
+Expected UI pages: `/photos`, `/photos/[id]`, dashboard recent-photo previews.
 
-Testing strategy: Query helper tests and integration tests.
+Testing strategy: Query helper tests, date fallback and grouping tests, pagination tests, path ownership tests, deletion validation tests, and manual signed-image checks with configured Supabase credentials.
 
-Learning-document topics: pagination, indexes, responsive galleries.
+Learning-document topics: pagination, private signed URLs, timeline grouping, detail authorization, deletion cleanup.
 
-Completion criteria: Photos load efficiently and sort predictably.
+Completion criteria: Authenticated users can browse, inspect, and delete only their own private photos. Gallery URLs stay temporary and no public Storage URLs are stored.
 
 ## Phase 5: Albums
 
