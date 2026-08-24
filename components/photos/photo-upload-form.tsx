@@ -12,11 +12,14 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { parseExifTakenAtFromArrayBuffer } from "@/lib/photos/exif";
+import {
+  getPhotoImportKind,
+  prepareUserPhotoForUpload,
+  USER_PHOTO_IMPORT_ACCEPT_TYPES,
+  type PreparedPhotoUpload,
+} from "@/lib/photos/heic";
 import {
   getUserPhotoBatchValidationError,
-  getUserPhotoValidationError,
-  USER_PHOTO_ALLOWED_TYPES,
   USER_PHOTO_BUCKET,
   USER_PHOTO_MAX_BATCH_SIZE,
   USER_PHOTO_MAX_SIZE_BYTES,
@@ -25,7 +28,13 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type UploadStatus =
-  "ready" | "reading" | "invalid" | "uploading" | "uploaded" | "failed";
+  | "ready"
+  | "preparing"
+  | "converting"
+  | "invalid"
+  | "uploading"
+  | "uploaded"
+  | "failed";
 
 type SelectedPhoto = {
   error: string | null;
@@ -33,13 +42,14 @@ type SelectedPhoto = {
   height: number | null;
   id: string;
   path: string | null;
-  previewUrl: string;
+  previewUrl: string | null;
   status: UploadStatus;
   takenAt: string | null;
+  uploadFile: File | null;
   width: number | null;
 };
 
-const ACCEPTED_TYPES = USER_PHOTO_ALLOWED_TYPES.join(",");
+const ACCEPTED_TYPES = USER_PHOTO_IMPORT_ACCEPT_TYPES.join(",");
 
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) {
@@ -62,81 +72,69 @@ function statusTone(status: UploadStatus) {
 }
 
 function statusLabel(status: UploadStatus) {
-  if (status === "reading") {
-    return "checking";
+  if (status === "preparing") {
+    return "Preparing";
   }
 
-  return status;
+  if (status === "converting") {
+    return "Converting HEIC";
+  }
+
+  if (status === "ready") {
+    return "Ready";
+  }
+
+  if (status === "uploading") {
+    return "Uploading";
+  }
+
+  if (status === "uploaded") {
+    return "Uploaded";
+  }
+
+  if (status === "failed") {
+    return "Failed";
+  }
+
+  return "Invalid";
 }
 
-function readImageDimensions(url: string) {
-  return new Promise<{ height: number; width: number }>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      resolve({ height: image.naturalHeight, width: image.naturalWidth });
-    };
-    image.onerror = () => reject(new Error("Could not read image dimensions."));
-    image.src = url;
-  });
+function buildSelectedPhoto(
+  originalFile: File,
+  prepared: PreparedPhotoUpload,
+  id: string,
+): SelectedPhoto {
+  return {
+    error: null,
+    file: originalFile,
+    height: prepared.height,
+    id,
+    path: null,
+    previewUrl: prepared.previewUrl,
+    status: "ready",
+    takenAt: prepared.takenAt,
+    uploadFile: prepared.file,
+    width: prepared.width,
+  };
 }
 
-async function buildSelectedPhoto(file: File): Promise<SelectedPhoto> {
-  const id = crypto.randomUUID();
-  const previewUrl = URL.createObjectURL(file);
-  const validationError = getUserPhotoValidationError({
-    size: file.size,
-    type: file.type,
-  });
-
-  if (validationError) {
-    return {
-      error: validationError,
-      file,
-      height: null,
-      id,
-      path: null,
-      previewUrl,
-      status: "invalid",
-      takenAt: null,
-      width: null,
-    };
-  }
-
-  try {
-    const [{ height, width }, buffer] = await Promise.all([
-      readImageDimensions(previewUrl),
-      file.type === "image/jpeg"
-        ? file.arrayBuffer()
-        : Promise.resolve(new ArrayBuffer(0)),
-    ]);
-
-    return {
-      error: null,
-      file,
-      height,
-      id,
-      path: null,
-      previewUrl,
-      status: "ready",
-      takenAt:
-        file.type === "image/jpeg"
-          ? parseExifTakenAtFromArrayBuffer(buffer)
-          : null,
-      width,
-    };
-  } catch {
-    return {
-      error: "We could not read this image safely.",
-      file,
-      height: null,
-      id,
-      path: null,
-      previewUrl,
-      status: "invalid",
-      takenAt: null,
-      width: null,
-    };
-  }
+function buildFailedSelectedPhoto(
+  file: File,
+  id: string,
+  message: string,
+): SelectedPhoto {
+  return {
+    error: message,
+    file,
+    height: null,
+    id,
+    path: null,
+    previewUrl: null,
+    status: "failed",
+    takenAt: null,
+    uploadFile: null,
+    width: null,
+  };
 }
 
 export function PhotoUploadForm() {
@@ -153,9 +151,11 @@ export function PhotoUploadForm() {
 
   useEffect(() => {
     return () => {
-      photosRef.current.forEach((photo) =>
-        URL.revokeObjectURL(photo.previewUrl),
-      );
+      photosRef.current.forEach((photo) => {
+        if (photo.previewUrl) {
+          URL.revokeObjectURL(photo.previewUrl);
+        }
+      });
     };
   }, []);
 
@@ -163,7 +163,7 @@ export function PhotoUploadForm() {
     setMessage(null);
 
     const files = Array.from(fileList);
-    const activeCount = photos.filter(
+    const activeCount = photosRef.current.filter(
       (photo) => photo.status !== "uploaded",
     ).length;
     const batchError = getUserPhotoBatchValidationError(
@@ -175,40 +175,74 @@ export function PhotoUploadForm() {
       return;
     }
 
-    const readingPhotos = files.map((file) => ({
+    const preparingPhotos = files.map((file) => ({
       error: null,
       file,
       height: null,
       id: crypto.randomUUID(),
       path: null,
-      previewUrl: URL.createObjectURL(file),
-      status: "reading" as const,
+      previewUrl: null,
+      status: "preparing" as const,
       takenAt: null,
+      uploadFile: null,
       width: null,
     }));
 
-    setPhotos((current) => [...current, ...readingPhotos]);
+    const nextPhotos = [...photosRef.current, ...preparingPhotos];
+    photosRef.current = nextPhotos;
+    setPhotos(nextPhotos);
 
-    const completed = await Promise.all(
-      readingPhotos.map(async (photo) => {
-        URL.revokeObjectURL(photo.previewUrl);
-        return buildSelectedPhoto(photo.file);
-      }),
-    );
+    for (const photo of preparingPhotos) {
+      if (!photosRef.current.some((item) => item.id === photo.id)) {
+        continue;
+      }
 
-    setPhotos((current) =>
-      current.map((photo) => {
-        const replacement = completed.find((item) => item.file === photo.file);
-        return replacement ?? photo;
-      }),
-    );
+      if (getPhotoImportKind(photo.file) === "heic") {
+        setPhotos((current) =>
+          current.map((item) =>
+            item.id === photo.id ? { ...item, status: "converting" } : item,
+          ),
+        );
+      }
+
+      try {
+        const prepared = await prepareUserPhotoForUpload(photo.file);
+        const completed = buildSelectedPhoto(photo.file, prepared, photo.id);
+
+        setPhotos((current) => {
+          if (!current.some((item) => item.id === photo.id)) {
+            if (completed.previewUrl) {
+              URL.revokeObjectURL(completed.previewUrl);
+            }
+            return current;
+          }
+
+          return current.map((item) =>
+            item.id === photo.id ? completed : item,
+          );
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "We could not prepare this image safely.";
+
+        setPhotos((current) =>
+          current.map((item) =>
+            item.id === photo.id
+              ? buildFailedSelectedPhoto(photo.file, photo.id, message)
+              : item,
+          ),
+        );
+      }
+    }
   }
 
   function removePhoto(id: string) {
     setPhotos((current) => {
       const target = current.find((photo) => photo.id === id);
 
-      if (target) {
+      if (target?.previewUrl) {
         URL.revokeObjectURL(target.previewUrl);
       }
 
@@ -217,12 +251,27 @@ export function PhotoUploadForm() {
   }
 
   async function uploadPhoto(photo: SelectedPhoto) {
+    if (!photo.uploadFile) {
+      setPhotos((current) =>
+        current.map((item) =>
+          item.id === photo.id
+            ? {
+                ...item,
+                error: "We could not prepare that upload. Please try again.",
+                status: "failed",
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+
     const request: PhotoUploadFileRequest = {
       clientId: photo.id,
       height: photo.height,
-      mimeType: photo.file.type,
+      mimeType: photo.uploadFile.type,
       originalFileName: photo.file.name,
-      size: photo.file.size,
+      size: photo.uploadFile.size,
       takenAt: photo.takenAt,
       width: photo.width,
     };
@@ -253,8 +302,8 @@ export function PhotoUploadForm() {
     const supabase = createSupabaseBrowserClient();
     const { error: uploadError } = await supabase.storage
       .from(USER_PHOTO_BUCKET)
-      .uploadToSignedUrl(initResult.path, initResult.token, photo.file, {
-        contentType: photo.file.type,
+      .uploadToSignedUrl(initResult.path, initResult.token, photo.uploadFile, {
+        contentType: photo.uploadFile.type,
       });
 
     if (uploadError) {
@@ -319,6 +368,56 @@ export function PhotoUploadForm() {
 
   function retryPhoto(photo: SelectedPhoto) {
     startTransition(async () => {
+      if (!photo.uploadFile) {
+        setPhotos((current) =>
+          current.map((item) =>
+            item.id === photo.id
+              ? {
+                  ...item,
+                  error: null,
+                  status:
+                    getPhotoImportKind(photo.file) === "heic"
+                      ? "converting"
+                      : "preparing",
+                }
+              : item,
+          ),
+        );
+
+        try {
+          const prepared = await prepareUserPhotoForUpload(photo.file);
+          const completed = buildSelectedPhoto(photo.file, prepared, photo.id);
+
+          setPhotos((current) => {
+            if (!current.some((item) => item.id === photo.id)) {
+              if (completed.previewUrl) {
+                URL.revokeObjectURL(completed.previewUrl);
+              }
+              return current;
+            }
+
+            return current.map((item) =>
+              item.id === photo.id ? completed : item,
+            );
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "We could not prepare this image safely.";
+
+          setPhotos((current) =>
+            current.map((item) =>
+              item.id === photo.id
+                ? buildFailedSelectedPhoto(photo.file, photo.id, message)
+                : item,
+            ),
+          );
+        }
+
+        return;
+      }
+
       setPhotos((current) =>
         current.map((item) =>
           item.id === photo.id
@@ -372,7 +471,7 @@ export function PhotoUploadForm() {
           <div>
             <h2 className="heading-section">Choose private photos</h2>
             <p className="text-secondary mt-2 text-sm leading-6">
-              Click or drag images here. JPEG, PNG, or WEBP only, up to{" "}
+              Click or drag images here. JPEG, PNG, WEBP, HEIC, or HEIF, up to{" "}
               {formatBytes(USER_PHOTO_MAX_SIZE_BYTES)} each and{" "}
               {USER_PHOTO_MAX_BATCH_SIZE} files per batch.
             </p>
@@ -424,11 +523,15 @@ export function PhotoUploadForm() {
           <ul className="photo-selected-list mt-5">
             {photos.map((photo) => (
               <li key={photo.id} className="photo-selected-item">
-                <img
-                  alt=""
-                  className="photo-selected-preview"
-                  src={photo.previewUrl}
-                />
+                {photo.previewUrl ? (
+                  <img
+                    alt=""
+                    className="photo-selected-preview"
+                    src={photo.previewUrl}
+                  />
+                ) : (
+                  <div className="photo-selected-preview" aria-hidden="true" />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="truncate font-bold">{photo.file.name}</h3>
@@ -437,7 +540,7 @@ export function PhotoUploadForm() {
                     </Badge>
                   </div>
                   <p className="text-secondary mt-1 text-sm">
-                    {formatBytes(photo.file.size)}
+                    {formatBytes(photo.uploadFile?.size ?? photo.file.size)}
                     {photo.width && photo.height
                       ? ` · ${photo.width} x ${photo.height}`
                       : ""}
@@ -482,7 +585,7 @@ export function PhotoUploadForm() {
                 key={photo.id}
                 alt=""
                 className="photo-session-preview"
-                src={photo.previewUrl}
+                src={photo.previewUrl ?? ""}
               />
             ))}
           </div>

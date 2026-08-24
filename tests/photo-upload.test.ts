@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   parseExifTakenAtFromArrayBuffer,
   resolveTakenAtWithFallback,
@@ -68,6 +68,20 @@ describe("photo upload validation and metadata", () => {
     expect(isUserPhotoPathForUser(path, "user-2")).toBe(false);
   });
 
+  it("builds converted HEIC storage paths as UUID JPEG objects", () => {
+    const path = buildUserPhotoPath({
+      mimeType: "image/jpeg",
+      now: new Date("2026-07-21T12:30:00.000Z"),
+      uniqueId: "550e8400-e29b-41d4-a716-446655440000",
+      userId: "user-1",
+    });
+
+    expect(path).toBe(
+      "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+    );
+    expect(path).not.toContain("IMG_1000.HEIC");
+  });
+
   it("validates metadata shape and ownership path before database insertion", () => {
     const uploadTimestamp = "2026-07-21T15:00:00.000Z";
 
@@ -120,10 +134,15 @@ describe("photo upload validation and metadata", () => {
 
 describe("photo upload server actions", () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     vi.resetModules();
     vi.doMock("next/cache", () => ({
       revalidatePath: vi.fn(),
     }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("rejects upload initialization when Supabase is not configured", async () => {
@@ -211,5 +230,160 @@ describe("photo upload server actions", () => {
     expect(result.status).toBe("failed");
     expect(fromStorage).toHaveBeenCalledWith("user-photos");
     expect(remove).toHaveBeenCalledWith(["user-1/2026/07/photo-id.png"]);
+  });
+
+  it("initializes converted HEIC uploads with JPEG storage paths", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-21T12:30:00.000Z"));
+
+    const createSignedUploadUrl = vi.fn(async (path: string) => ({
+      data: { path, token: "signed-token" },
+      error: null,
+    }));
+    const fromStorage = vi.fn(() => ({ createSignedUploadUrl }));
+
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "550e8400-e29b-41d4-a716-446655440000",
+    });
+    vi.doMock("@/lib/env", () => ({
+      getPublicEnvStatus: () => ({ isConfigured: true }),
+    }));
+    vi.doMock("@/lib/supabase/server", () => ({
+      createSupabaseServerClient: vi.fn(async () => ({
+        auth: {
+          getUser: vi.fn(async () => ({
+            data: { user: { id: "user-1" } },
+          })),
+        },
+        storage: {
+          from: fromStorage,
+        },
+      })),
+    }));
+
+    const { initializePhotoUploadsAction } =
+      await import("@/app/actions/photos");
+    const [result] = await initializePhotoUploadsAction([
+      {
+        clientId: "client-1",
+        height: 900,
+        mimeType: "image/jpeg",
+        originalFileName: "IMG_1000.HEIC",
+        size: 2048,
+        takenAt: "2026-07-20T12:30:00.000Z",
+        width: 1200,
+      },
+    ]);
+
+    expect(result.path).toBe(
+      "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+    );
+    expect(createSignedUploadUrl).toHaveBeenCalledWith(
+      "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+      { upsert: false },
+    );
+  });
+
+  it("returns a safe failure when converted JPEG upload preparation fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-21T12:30:00.000Z"));
+
+    const createSignedUploadUrl = vi.fn(async () => ({
+      data: null,
+      error: { message: "Storage unavailable" },
+    }));
+    const fromStorage = vi.fn(() => ({ createSignedUploadUrl }));
+
+    vi.stubGlobal("crypto", {
+      randomUUID: () => "550e8400-e29b-41d4-a716-446655440000",
+    });
+    vi.doMock("@/lib/env", () => ({
+      getPublicEnvStatus: () => ({ isConfigured: true }),
+    }));
+    vi.doMock("@/lib/supabase/server", () => ({
+      createSupabaseServerClient: vi.fn(async () => ({
+        auth: {
+          getUser: vi.fn(async () => ({
+            data: { user: { id: "user-1" } },
+          })),
+        },
+        storage: {
+          from: fromStorage,
+        },
+      })),
+    }));
+
+    const { initializePhotoUploadsAction } =
+      await import("@/app/actions/photos");
+    const [result] = await initializePhotoUploadsAction([
+      {
+        clientId: "client-1",
+        height: 900,
+        mimeType: "image/jpeg",
+        originalFileName: "IMG_1000.HEIC",
+        size: 2048,
+        takenAt: null,
+        width: 1200,
+      },
+    ]);
+
+    expect(result).toEqual({
+      clientId: "client-1",
+      message: "We could not prepare that upload. Please try again.",
+      status: "error",
+    });
+    expect(createSignedUploadUrl).toHaveBeenCalledWith(
+      "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+      { upsert: false },
+    );
+  });
+
+  it("stores converted JPEG metadata while preserving the original HEIC filename and taken date", async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: { id: "photo-id" },
+      error: null,
+    });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    const fromTable = vi.fn(() => ({ insert }));
+
+    vi.doMock("@/lib/env", () => ({
+      getPublicEnvStatus: () => ({ isConfigured: true }),
+    }));
+    vi.doMock("@/lib/supabase/server", () => ({
+      createSupabaseServerClient: vi.fn(async () => ({
+        auth: {
+          getUser: vi.fn(async () => ({
+            data: { user: { id: "user-1" } },
+          })),
+        },
+        from: fromTable,
+      })),
+    }));
+
+    const { finalizePhotoUploadAction } = await import("@/app/actions/photos");
+    const result = await finalizePhotoUploadAction({
+      clientId: "client-1",
+      height: 900,
+      mimeType: "image/jpeg",
+      originalFileName: "../IMG_1000.HEIC",
+      path: "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+      size: 2048,
+      takenAt: "2026-07-20T12:30:00.000Z",
+      width: 1200,
+    });
+
+    expect(result.status).toBe("uploaded");
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file_name: "IMG_1000.HEIC",
+        file_size: 2048,
+        height: 900,
+        mime_type: "image/jpeg",
+        storage_path: "user-1/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+        taken_at: "2026-07-20T12:30:00.000Z",
+        width: 1200,
+      }),
+    );
   });
 });

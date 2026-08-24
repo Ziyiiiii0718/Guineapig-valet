@@ -160,4 +160,24 @@ describe("photo gallery security and formatting helpers", () => {
     expect(formatPhotoDimensions(1179, 2556)).toBe("1179 x 2556");
     expect(formatPhotoDimensions(null, 2556)).toBe("Unknown dimensions");
   });
+
+  it("treats converted HEIC rows as normal JPEG gallery rows", () => {
+    const convertedPhoto = {
+      created_at: "2026-07-22T00:00:00.000Z",
+      file_name: "IMG_1000.HEIC",
+      id: "converted-photo",
+      mime_type: "image/jpeg",
+      storage_path: "user-a/2026/07/550e8400-e29b-41d4-a716-446655440000.jpg",
+      taken_at: "2026-07-20T12:30:00.000Z",
+      uploaded_at: "2026-07-22T00:00:00.000Z",
+    };
+
+    expect(isOwnedUserPhotoPath(convertedPhoto.storage_path, "user-a")).toBe(
+      true,
+    );
+    expect(getPhotoDisplayDate(convertedPhoto)?.toISOString()).toBe(
+      "2026-07-20T12:30:00.000Z",
+    );
+    expect(groupPhotosByTimelineMonth([convertedPhoto])[0]?.id).toBe("2026-07");
+  });
 });

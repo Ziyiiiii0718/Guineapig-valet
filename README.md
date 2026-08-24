@@ -18,13 +18,13 @@ Implemented:
 - Server-side authentication actions for login, registration, and logout.
 - Authenticated guinea pig profile CRUD at `/pets`.
 - Private pet profile-avatar upload, replacement, removal, signed rendering, and fallback initials.
-- Private general-photo upload at `/photos/upload` with direct browser uploads to Supabase Storage and PostgreSQL metadata inserts.
+- Private general-photo upload at `/photos/upload` with direct browser uploads to Supabase Storage and PostgreSQL metadata inserts, including browser-side HEIC/HEIF-to-JPEG import conversion.
 - Private photo gallery at `/photos` with chronological month grouping, newest/oldest sorting, and pagination.
 - Private photo detail pages with signed image display, metadata, honest AI status, and safe deletion.
 - Dashboard pet summary backed by real private pet data.
 - Dashboard recent-photo previews and entry points for gallery browsing and upload.
 - Server-side pet validation, ownership checks, and age display helpers.
-- Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, and best-effort Storage cleanup.
+- Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, HEIC/HEIF original filename preservation, and best-effort Storage cleanup.
 - Environment-variable validation and missing-configuration messaging.
 - First-round visual foundation with centralized design tokens and small reusable UI components.
 - Initial PostgreSQL schema and Row Level Security migration.
@@ -183,7 +183,9 @@ They define profiles, pets, photos, reference photos, predictions, albums, album
 
 ## Photo Upload Limits
 
-The current private photo upload supports JPEG, PNG, and WEBP images. Each file must be 10 MB or smaller, and each upload batch may contain up to 10 files. Uploaded photo objects are stored in the private `user-photos` bucket under an owner-scoped path like `<user-id>/<year>/<month>/<unique-file-name>`.
+The current private photo upload supports JPEG, PNG, WEBP, HEIC, and HEIF imports. Each file must be 10 MB or smaller, and each upload batch may contain up to 10 files. Uploaded photo objects are stored in the private `user-photos` bucket under an owner-scoped path like `<user-id>/<year>/<month>/<unique-file-name>`.
+
+HEIF is the container format; HEIC is the common HEIF image flavor produced by iPhones. Browsers do not reliably display raw HEIC/HEIF images, so PiggieVault dynamically loads a browser HEIC decoder only when needed, reads the original capture date before conversion when possible, converts the image to JPEG at about 0.9 quality in the browser, and uploads only that JPEG to the private `user-photos` bucket. The database preserves the original filename, while `mime_type`, `file_size`, dimensions, and Storage path describe the stored JPEG. Live Photo `.mov` video components are intentionally deferred and are not uploaded in this phase.
 
 The private gallery renders signed image URLs for the current result set only. Gallery signed URLs are short-lived and are not stored in PostgreSQL. Timeline grouping uses a UTC display date: `taken_at` when present, otherwise `uploaded_at`, otherwise `created_at`.
 
@@ -207,7 +209,7 @@ Current tests cover:
 - Pet profile validation, allowed sex values, optional fields, and future birth-date rejection.
 - Date-only pet age calculation for completed years and months.
 - Pet avatar file validation, fallback rendering, avatar storage-path ownership, and clickable pet-card route generation.
-- Photo upload file validation, EXIF date parsing, Storage path ownership, and upload metadata validation.
+- Photo upload file validation, HEIC/HEIF detection and mocked conversion, EXIF date parsing, Storage path ownership, and upload metadata validation.
 - Photo gallery display-date fallback, sorting, month grouping, pagination, detail ID validation, path ownership, and metadata formatting.
 
 Future tests should cover deeper server-action behavior and route behavior with configured Supabase credentials.
