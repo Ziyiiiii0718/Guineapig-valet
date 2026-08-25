@@ -21,7 +21,7 @@ auth.users
 
 - `profiles`: optional application profile data for an authenticated user.
 - `pets`: guinea pig profiles owned by a user.
-- `photos`: private uploaded photo metadata, including Storage path, original filename, file size, MIME type, dimensions, upload time, taken time, and AI status.
+- `photos`: private uploaded photo metadata, including stable Storage path, original filename, optional editable display name, file size, MIME type, dimensions, upload time, taken time, and AI status.
 - `pet_reference_photos`: reference photos for future AI embeddings.
 - `photo_pet_predictions`: AI or manual labels for photos.
 - `albums`: user-created photo collections.
@@ -59,6 +59,7 @@ See:
 - `supabase/migrations/0001_initial_schema.sql`
 - `supabase/migrations/0002_pet_avatar_storage.sql`
 - `supabase/migrations/0003_user_photo_upload_storage.sql`
+- `supabase/migrations/0004_photo_display_names.sql`
 
 ## Current Photo Upload Metadata
 
@@ -79,3 +80,7 @@ Gallery display dates use a typed application helper:
 Dates are formatted as UTC calendar dates for stable month grouping. Signed URLs are generated at render time from `storage_path` and are never stored in database columns.
 
 Photo deletion is split across Storage and PostgreSQL because they are separate systems. The app deletes the private Storage object first, then the `photos` row. This favors not leaving private image files behind, while reporting a partial failure if metadata deletion fails afterward.
+
+## Editable Photo Names
+
+`photos.display_name` is nullable, trimmed user-facing metadata with an 80-character database constraint. A null value falls back to the preserved original `file_name`; it does not rename `storage_path`. Rename and reset operations therefore stay inside PostgreSQL and do not create a cross-system Storage transaction.

@@ -949,6 +949,14 @@ a {
     width: 100%;
   }
 
+  .photo-name-editor {
+    min-width: min(100%, 280px);
+  }
+
+  .photo-name-form {
+    max-width: 520px;
+  }
+
   @media (max-width: 639px) {
     .photo-drop-zone {
       align-items: flex-start;

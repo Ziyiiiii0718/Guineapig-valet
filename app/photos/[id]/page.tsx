@@ -3,10 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ConfigNotice } from "@/components/config-notice";
 import { DeletePhotoForm } from "@/components/photos/delete-photo-form";
+import { PhotoNameEditor } from "@/components/photos/photo-name-editor";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { getPhotoDisplayName } from "@/lib/photos/display-name";
 import {
   formatPhotoCalendarDate,
   formatPhotoDimensions,
@@ -77,6 +79,7 @@ export default async function PhotoDetailPage({
   }
 
   const displayDate = getPhotoDisplayDate(photo);
+  const displayName = getPhotoDisplayName(photo);
 
   return (
     <div className="space-y-6">
@@ -85,8 +88,12 @@ export default async function PhotoDetailPage({
           <Link href="/photos" className="link-primary text-sm">
             Back to photos
           </Link>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="heading-page break-words">{photo.file_name}</h1>
+          <div className="mt-3 flex flex-wrap items-start gap-3">
+            <PhotoNameEditor
+              displayName={displayName}
+              hasCustomName={Boolean(photo.display_name?.trim())}
+              photoId={photo.id}
+            />
             <Badge tone="neutral">Private</Badge>
           </div>
           <p className="text-secondary mt-2 text-sm">
@@ -109,7 +116,7 @@ export default async function PhotoDetailPage({
           {photo.signed_url ? (
             <Image
               src={photo.signed_url}
-              alt={photo.file_name}
+              alt={displayName}
               width={photo.width ?? 1400}
               height={photo.height ?? 1000}
               sizes="(min-width: 1024px) 960px, 100vw"

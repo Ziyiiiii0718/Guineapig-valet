@@ -16,6 +16,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export type PhotoRow = {
   ai_status: string;
   created_at: string | null;
+  display_name: string | null;
   file_name: string;
   file_size: number;
   height: number | null;
@@ -34,7 +35,7 @@ export type PhotoWithSignedUrl = PhotoRow & {
 };
 
 const PHOTO_COLUMNS =
-  "id,user_id,storage_path,taken_at,uploaded_at,file_name,file_size,width,height,ai_status,created_at,mime_type";
+  "id,user_id,storage_path,taken_at,uploaded_at,file_name,display_name,file_size,width,height,ai_status,created_at,mime_type";
 
 export async function createUserPhotoSignedUrl(
   supabase: SupabaseClient,

@@ -14,3 +14,4 @@ Each document explains a major engineering area in interview-friendly language:
 10. `10-pet-avatar-storage.md`
 11. `11-private-photo-upload.md`
 12. `12-private-photo-gallery.md`
+13. `13-editable-photo-names.md`

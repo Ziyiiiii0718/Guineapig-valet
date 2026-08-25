@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { getPhotoDisplayName } from "@/lib/photos/display-name";
 import {
   formatPhotoCalendarDate,
   formatPhotoFileSize,
@@ -15,12 +16,13 @@ type PhotoCardProps = {
 
 export function PhotoCard({ photo, priority = false }: PhotoCardProps) {
   const displayDate = getPhotoDisplayDate(photo);
+  const displayName = getPhotoDisplayName(photo);
 
   return (
     <Link
       href={`/photos/${photo.id}`}
       className="photo-card focus-ring"
-      aria-label={`View ${photo.file_name}`}
+      aria-label={`View ${displayName}`}
     >
       <span className="photo-card-image-wrap">
         {photo.signed_url ? (
@@ -44,7 +46,9 @@ export function PhotoCard({ photo, priority = false }: PhotoCardProps) {
         )}
       </span>
       <span className="photo-card-body">
-        <span className="truncate font-bold">{photo.file_name}</span>
+        <span className="truncate font-bold" title={displayName}>
+          {displayName}
+        </span>
         <span className="text-secondary text-sm">
           {formatPhotoCalendarDate(displayDate)} ·{" "}
           {formatPhotoFileSize(photo.file_size)}

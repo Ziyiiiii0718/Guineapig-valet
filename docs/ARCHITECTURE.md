@@ -37,17 +37,19 @@ User submits credentials
 - `app/pets/[id]/edit/page.tsx`: private pet editing form.
 - `app/actions/auth.ts`: server actions for login, registration, logout.
 - `app/actions/pets.ts`: server actions for pet create, update, delete, avatar upload, avatar replacement, and avatar removal.
-- `app/actions/photos.ts`: server actions for signed photo-upload requests and metadata finalization.
+- `app/actions/photos.ts`: server actions for signed photo-upload requests, metadata finalization, editable names, and deletion.
 - `app/photos/page.tsx`: authenticated private photo gallery with sorting, pagination, and timeline grouping.
 - `app/photos/[id]/page.tsx`: authenticated private photo detail page.
 - `app/photos/upload/page.tsx`: authenticated private photo upload page.
 - `components/photos/delete-photo-form.tsx`: accessible confirmation dialog for permanent photo deletion.
 - `components/photos/photo-card.tsx`: signed-image gallery card component.
+- `components/photos/photo-name-editor.tsx`: compact accessible display-name editor for photo detail.
 - `components/photos/photo-upload-form.tsx`: selected-file review, direct Storage upload, per-file status, and retry UI.
 - `components/pets/pet-avatar-form.tsx`: edit-page avatar upload and removal UI.
 - `lib/photos/upload.ts`: shared photo upload limits, file validation, path helpers, and metadata validation.
 - `lib/photos/exif.ts`: browser-safe EXIF taken-date parsing and fallback helpers.
 - `lib/photos/gallery.ts`: display-date fallback, sort parsing, timeline grouping, pagination, and formatting helpers.
+- `lib/photos/display-name.ts`: editable-name validation and shared user-facing filename fallback.
 - `lib/photos/queries.ts`: server-only photo queries and signed URL generation.
 - `lib/pets/avatar.ts`: avatar file validation and ownership-scoped Storage path helpers.
 - `lib/pets/avatar-urls.ts`: server-only signed URL generation for private avatars.
@@ -60,6 +62,7 @@ User submits credentials
 - `supabase/migrations/0001_initial_schema.sql`: relational schema and RLS.
 - `supabase/migrations/0002_pet_avatar_storage.sql`: private avatar bucket and Storage policies.
 - `supabase/migrations/0003_user_photo_upload_storage.sql`: private general-photo bucket, Storage policies, and photo metadata refinements.
+- `supabase/migrations/0004_photo_display_names.sql`: nullable constrained user-facing photo names.
 
 ## Pet Avatar Storage Flow
 
@@ -115,6 +118,20 @@ Detail page
 ```
 
 Deletion removes the Storage object first, then the metadata row. This avoids a misleading success state where the row is gone but the private image remains. The trade-off is that if the later row deletion fails, the app reports that partial failure and leaves a broken metadata row for retry or maintenance cleanup.
+
+## Editable Photo Name Flow
+
+```text
+Detail page edit form
+-> Server Action validates photo ID and display name
+-> Server Action authenticates the current user
+-> query photo by id and authenticated user_id
+-> RLS independently enforces the same ownership rule
+-> update only display_name and updated_at
+-> revalidate detail, gallery, and Dashboard
+```
+
+The original `file_name` and UUID `storage_path` stay unchanged. Keeping user-facing metadata separate avoids copying or moving a private object and preserves signed-image delivery, HEIC conversion output, and deletion behavior.
 
 ## Future AI Boundary
 

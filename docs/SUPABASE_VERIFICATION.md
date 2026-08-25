@@ -38,6 +38,12 @@ Remote migration status after `db push`:
 
 No remote database reset command was run.
 
+## Phase 2C Migration Status
+
+Migration `supabase/migrations/0004_photo_display_names.sql` was applied to the linked project on 2026-08-25 after a dry run confirmed it was the only pending migration. Migration history now reports local and remote versions `0001` through `0004` as synchronized. No database reset was run, and no previously applied migration was modified.
+
+Read-only catalog verification confirmed that `photos.display_name` is nullable `text` with no default. The `photos_display_name_check` constraint permits `NULL` or a trimmed value between 1 and 80 characters. Both existing photo rows remained present with `display_name = NULL`, `photos` still has RLS enabled, and the existing SELECT, INSERT, UPDATE, and DELETE ownership policies remain installed.
+
 ## Remote Schema Verified
 
 Extensions verified:

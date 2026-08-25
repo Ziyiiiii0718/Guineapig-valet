@@ -77,4 +77,8 @@ Photo deletion never trusts a browser-submitted Storage path. The Server Action 
 
 The app deletes Storage first because an orphaned private object is harder for a user to notice than a failed metadata deletion. If Storage deletion fails, the row is kept. If row deletion fails after Storage succeeds, the app reports a partial failure and leaves a metadata record that can be retried or cleaned up later.
 
+## Private Photo Name Updates
+
+Editable photo names are PostgreSQL metadata only. The Server Action validates the photo UUID and name, derives the current user from Supabase Auth, reads and updates with both photo ID and authenticated `user_id`, and never accepts a browser-supplied owner or Storage path. Existing photo update RLS remains the database-level backstop. The update changes only `display_name` and `updated_at`; original filenames and private Storage objects remain unchanged.
+
 Reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.

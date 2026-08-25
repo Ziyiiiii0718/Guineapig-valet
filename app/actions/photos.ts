@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getPublicEnvStatus } from "@/lib/env";
+import { photoDisplayNameSchema } from "@/lib/photos/display-name";
 import { photoIdSchema } from "@/lib/photos/gallery";
 import {
   buildUserPhotoPath,
@@ -55,6 +56,13 @@ export type PhotoDeleteActionState = {
   status: "idle" | "error";
 };
 
+export type PhotoNameActionState = {
+  fieldValue?: string;
+  message?: string;
+  resultId?: string;
+  status: "idle" | "error" | "success";
+};
+
 function logPhotoUploadPreparationFailure({
   category,
   error,
@@ -76,7 +84,9 @@ function logPhotoUploadPreparationFailure({
   });
 }
 
-async function getAuthenticatedPhotoUser() {
+async function getAuthenticatedPhotoUser(
+  unauthenticatedMessage = "Please log in to upload photos.",
+) {
   if (!getPublicEnvStatus().isConfigured) {
     return {
       error: "Supabase is not configured yet.",
@@ -92,13 +102,108 @@ async function getAuthenticatedPhotoUser() {
 
   if (!user) {
     return {
-      error: "Please log in to upload photos.",
+      error: unauthenticatedMessage,
       supabase,
       user: null,
     };
   }
 
   return { error: null, supabase, user };
+}
+
+export async function updatePhotoDisplayNameAction(
+  _previousState: PhotoNameActionState,
+  formData: FormData,
+): Promise<PhotoNameActionState> {
+  const photoId = String(formData.get("photoId") ?? "");
+  const intent = String(formData.get("intent") ?? "save");
+  const fieldValue = String(formData.get("displayName") ?? "");
+  const parsedPhotoId = photoIdSchema.safeParse(photoId);
+
+  if (!parsedPhotoId.success || (intent !== "save" && intent !== "reset")) {
+    return {
+      fieldValue,
+      message: "We could not find that photo.",
+      status: "error",
+    };
+  }
+
+  const parsedName =
+    intent === "save" ? photoDisplayNameSchema.safeParse(fieldValue) : null;
+
+  if (parsedName && !parsedName.success) {
+    return {
+      fieldValue,
+      message: parsedName.error.issues[0]?.message ?? "Enter a valid name.",
+      status: "error",
+    };
+  }
+
+  const {
+    error: authError,
+    supabase,
+    user,
+  } = await getAuthenticatedPhotoUser("Please log in to manage photos.");
+
+  if (authError || !supabase || !user) {
+    return {
+      fieldValue,
+      message: authError ?? "Please log in to manage photos.",
+      status: "error",
+    };
+  }
+
+  const { data: photo, error: readError } = await supabase
+    .from("photos")
+    .select("id,user_id,storage_path")
+    .eq("id", parsedPhotoId.data)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (
+    readError ||
+    !photo ||
+    photo.user_id !== user.id ||
+    !isUserPhotoPathForUser(photo.storage_path, user.id)
+  ) {
+    return {
+      fieldValue,
+      message: "We could not find that photo.",
+      status: "error",
+    };
+  }
+
+  const displayName =
+    intent === "reset" ? null : (parsedName?.data ?? fieldValue.trim());
+  const { error: updateError } = await supabase
+    .from("photos")
+    .update({
+      display_name: displayName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parsedPhotoId.data)
+    .eq("user_id", user.id);
+
+  if (updateError) {
+    return {
+      fieldValue,
+      message: "We could not update this photo name. Please try again.",
+      status: "error",
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/photos");
+  revalidatePath(`/photos/${parsedPhotoId.data}`);
+
+  return {
+    message:
+      intent === "reset"
+        ? "Photo name reset to the original filename."
+        : "Photo name updated.",
+    resultId: crypto.randomUUID(),
+    status: "success",
+  };
 }
 
 async function removeUploadedPhotoObject(
@@ -304,7 +409,7 @@ export async function deletePhotoAction(
     error: authError,
     supabase,
     user,
-  } = await getAuthenticatedPhotoUser();
+  } = await getAuthenticatedPhotoUser("Please log in to manage photos.");
 
   if (authError || !supabase || !user) {
     return {
