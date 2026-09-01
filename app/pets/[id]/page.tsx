@@ -11,6 +11,10 @@ import {
 } from "@/lib/pets/queries";
 import { displayOptional, formatPetSex } from "@/lib/pets/view";
 import { petIdSchema } from "@/lib/validation/pets";
+import { listWeightsForPet } from "@/lib/weights/queries";
+import { WeightSection } from "@/components/weights/weight-section";
+import { HealthSummary } from "@/components/health/health-summary";
+import { listHealthForPet } from "@/lib/health/queries";
 
 function DetailItem({
   label,
@@ -47,7 +51,11 @@ export default async function PetDetailPage({
     notFound();
   }
 
-  const { error, pet } = await getPetForUser(parsedPetId.data, user.id);
+  const [{ error, pet }, weights, health] = await Promise.all([
+    getPetForUser(parsedPetId.data, user.id),
+    listWeightsForPet(parsedPetId.data, user.id),
+    listHealthForPet(parsedPetId.data, user.id, { limit: 3 }),
+  ]);
 
   if (error || !pet) {
     notFound();
@@ -107,17 +115,29 @@ export default async function PetDetailPage({
         </Card>
 
         <Card soft>
-          <h2 className="heading-section">Future care sections</h2>
+          <h2 className="heading-section">Private care workspace</h2>
           <p className="text-secondary mt-2 text-sm leading-6">
-            Photos, reference images, weight records, and health notes are still
-            planned. This page only manages the core pet profile.
+            Reference images and AI classification remain planned. Photos,
+            albums, weight tracking, and health records are available now.
           </p>
           <div className="empty-state mt-5 text-sm">
-            Profile avatars use private Supabase Storage now. Full galleries and
-            AI reference-photo workflows remain separate future features.
+            Profile avatars and photos use private Supabase Storage. AI
+            reference-photo workflows remain a separate future feature.
           </div>
         </Card>
       </div>
+
+      <Card>
+        <WeightSection
+          petId={pet.id}
+          petName={pet.name}
+          records={weights.records}
+        />
+      </Card>
+
+      <Card>
+        <HealthSummary petId={pet.id} records={health.records} />
+      </Card>
 
       <DeletePetForm petId={pet.id} petName={pet.name} />
     </div>

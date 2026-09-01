@@ -60,6 +60,8 @@ See:
 - `supabase/migrations/0002_pet_avatar_storage.sql`
 - `supabase/migrations/0003_user_photo_upload_storage.sql`
 - `supabase/migrations/0004_photo_display_names.sql`
+- `supabase/migrations/0005_private_photo_albums.sql`
+- `supabase/migrations/0006_pet_weight_tracking.sql`
 
 ## Current Photo Upload Metadata
 
@@ -84,3 +86,15 @@ Photo deletion is split across Storage and PostgreSQL because they are separate 
 ## Editable Photo Names
 
 `photos.display_name` is nullable, trimmed user-facing metadata with an 80-character database constraint. A null value falls back to the preserved original `file_name`; it does not rename `storage_path`. Rename and reset operations therefore stay inside PostgreSQL and do not create a cross-system Storage transaction.
+
+## Album Relationships
+
+`albums` stores owner-scoped metadata in `title` (the UI name), optional `description`, and timestamps. `album_photos` uses `(album_id, photo_id)` as its primary key, preventing duplicate membership while allowing the same photo in different albums. `user_id` participates in composite foreign keys to both parent tables, so an album and photo must share the same owner. Album deletion and photo deletion cascade only to membership rows. Album deletion never references Storage.
+
+## Pet Weight Records
+
+`weight_records` is a one-to-many child of `pets`. `weight_grams` is an integer constrained to 100–5000. `recorded_at` is a date-only measurement day, separate from creation timestamps. Multiple records per pet/day are allowed; date, creation time, and UUID provide deterministic ordering. A composite `(pet_id, user_id)` foreign key prevents cross-owner pet relationships.
+
+## Phase 5 health records
+
+Migration `0007_private_pet_health_records.sql` evolves the existing child table with `record_type` and unified `notes`. Categories are constrained to symptom, vet visit, medication, treatment, or general. Titles remain required and limited to 120 characters; notes are limited to 4,000. `record_date` is a calendar date distinct from creation time. A composite `(pet_id, user_id)` foreign key prevents cross-owner relationships, and a deterministic history index supports newest-first reads.

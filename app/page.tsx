@@ -4,7 +4,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getPublicEnvStatus } from "@/lib/env";
 
-const plannedFeatures = [
+const projectFeatures = [
   "Private pet profiles",
   "Secure photo storage",
   "Albums and timelines",
@@ -46,12 +46,12 @@ export default function HomePage() {
         </div>
         <Card as="aside" soft className="hero-visual">
           <div className="flex items-start justify-between gap-4">
-            <h2 className="heading-section">Phase 1A status</h2>
-            <Badge tone="success">Foundation</Badge>
+            <h2 className="heading-section">Current project</h2>
+            <Badge tone="success">Private care</Badge>
           </div>
           <div className="meadow-strip mt-5" aria-hidden="true" />
           <ul className="mt-4 space-y-3">
-            {plannedFeatures.map((feature) => (
+            {projectFeatures.map((feature) => (
               <li
                 key={feature}
                 className="text-secondary flex items-start gap-3 text-sm"
@@ -62,8 +62,8 @@ export default function HomePage() {
             ))}
           </ul>
           <p className="text-secondary mt-5 text-sm">
-            AI classification, uploads, albums, and health records are planned.
-            They are not pretending to work yet.
+            Pet profiles, photos, albums, weight, and health records are live.
+            AI classification remains planned and is not presented as working.
           </p>
         </Card>
       </section>

@@ -81,4 +81,18 @@ The app deletes Storage first because an orphaned private object is harder for a
 
 Editable photo names are PostgreSQL metadata only. The Server Action validates the photo UUID and name, derives the current user from Supabase Auth, reads and updates with both photo ID and authenticated `user_id`, and never accepts a browser-supplied owner or Storage path. Existing photo update RLS remains the database-level backstop. The update changes only `display_name` and `updated_at`; original filenames and private Storage objects remain unchanged.
 
-Reference-photo uploads, albums, weight records, health records, and AI classification are still separate future phases.
+## Private Album Authorization
+
+Album Server Actions derive the current user from the server-side Supabase session and scope every album/photo read and mutation by that user. Browser forms submit only resource IDs and editable metadata, never a trusted `user_id`. RLS protects both `albums` and `album_photos`. For defense in depth, composite foreign keys require `album_photos.user_id` to match both the album owner and photo owner, preventing a User A album from referencing a User B photo. Signed URLs are generated only after owner-scoped photo queries and are never persisted or logged.
+
+Deleting an album issues no Storage operation and no photo-table delete. PostgreSQL cascades from the album only to its membership rows. Removing a membership similarly deletes only one `album_photos` row.
+
+Reference-photo uploads and AI classification remain separate future phases.
+
+## Private Weight Records
+
+Weight actions authenticate on the server, verify the referenced pet under the current `user_id`, and scope record reads and mutations by record, pet, and owner. RLS is the database backstop. A composite foreign key requires the record owner to match the pet owner. No service role or Storage access is used.
+
+## Phase 5 health-record security
+
+Health Server Actions never accept ownership as authoritative browser input. They authenticate the current user, confirm the pet is owned, and scope record reads and writes by user, pet, and record ID. RLS policies and the composite pet-owner foreign key provide database enforcement. Titles and notes render as text, raw database errors are not returned, and no service-role credential is used.

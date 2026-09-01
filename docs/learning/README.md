@@ -15,3 +15,6 @@ Each document explains a major engineering area in interview-friendly language:
 11. `11-private-photo-upload.md`
 12. `12-private-photo-gallery.md`
 13. `13-editable-photo-names.md`
+14. `14-private-photo-albums.md`
+15. `15-pet-weight-tracking.md`
+16. `16-private-pet-health-records.md`

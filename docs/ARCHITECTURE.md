@@ -51,6 +51,15 @@ User submits credentials
 - `lib/photos/gallery.ts`: display-date fallback, sort parsing, timeline grouping, pagination, and formatting helpers.
 - `lib/photos/display-name.ts`: editable-name validation and shared user-facing filename fallback.
 - `lib/photos/queries.ts`: server-only photo queries and signed URL generation.
+- `app/actions/albums.ts`: authenticated album metadata and membership mutations.
+- `app/albums/*`: private album overview, creation, detail, and photo-picker routes.
+- `components/albums/*`: album cards, forms, membership controls, and confirmation UI.
+- `lib/albums/queries.ts`: typed paginated album reads and authorized signed-image delivery.
+- `lib/albums/validation.ts`: album metadata, ID, and pagination validation.
+- `app/actions/weights.ts`: authenticated weight-record mutations.
+- `components/weights/*`: compact forms, history, summary, and responsive Recharts visualization.
+- `lib/weights/core.ts`: validation, date formatting, ordering, and derived calculations.
+- `lib/weights/queries.ts`: bounded owner-scoped weight reads.
 - `lib/pets/avatar.ts`: avatar file validation and ownership-scoped Storage path helpers.
 - `lib/pets/avatar-urls.ts`: server-only signed URL generation for private avatars.
 - `proxy.ts`: session refresh and route protection when Supabase is configured.
@@ -63,6 +72,18 @@ User submits credentials
 - `supabase/migrations/0002_pet_avatar_storage.sql`: private avatar bucket and Storage policies.
 - `supabase/migrations/0003_user_photo_upload_storage.sql`: private general-photo bucket, Storage policies, and photo metadata refinements.
 - `supabase/migrations/0004_photo_display_names.sql`: nullable constrained user-facing photo names.
+- `supabase/migrations/0005_private_photo_albums.sql`: album validation, composite ownership foreign keys, and ordering indexes.
+- `supabase/migrations/0006_pet_weight_tracking.sql`: canonical range, composite pet ownership, and stable history index.
+
+## Weight Tracking Flow
+
+```text
+Pet detail -> authenticated owner-scoped query -> newest-first history
+Client form -> Server Action -> pet ownership check -> RLS weight mutation
+History -> shared summary calculations -> Recharts chronological view
+```
+
+Weights use integer grams and calendar dates. The chart reverses the deterministic newest-first history for oldest-to-newest display; exact values remain available in text.
 
 ## Pet Avatar Storage Flow
 
@@ -133,6 +154,19 @@ Detail page edit form
 
 The original `file_name` and UUID `storage_path` stay unchanged. Keeping user-facing metadata separate avoids copying or moving a private object and preserves signed-image delivery, HEIC conversion output, and deletion behavior.
 
+## Private Album Flow
+
+```text
+Authenticated album route
+-> owner-scoped album and membership queries
+-> owner-scoped photo metadata query
+-> short-lived signed URLs for only the authorized page
+-> Server Action validates album/photo IDs and current user
+-> RLS plus composite album/photo ownership foreign keys
+```
+
+Albums do not create Storage folders or duplicate objects. `album_photos` links one photo to many albums. Deleting an album cascades only through join rows; deleting a photo cleans its memberships through the photo foreign key. Overview albums use recently updated ordering. Album contents use membership creation time descending plus photo ID descending. The automatic cover is the earliest surviving membership, so removal or photo deletion falls back without mutable cover state.
+
 ## Future AI Boundary
 
 ```text
@@ -150,3 +184,11 @@ The AI service should receive a server-authorized request containing a photo ID,
 ## Boundary Decision
 
 The first web app does not depend on the AI service. This keeps core authentication, CRUD, storage, and RLS work testable before machine-learning complexity is added.
+
+## Phase 5 health-record architecture
+
+- `/pets/[id]/health` is an authenticated Server Component route with validated URL filters and 25-row pagination.
+- `lib/health/core.ts` owns categories, validation, calendar-date formatting, sorting, filtering, and pagination rules.
+- `lib/health/queries.ts` performs bounded owner-scoped reads for full history, pet detail, and Dashboard.
+- `app/actions/health.ts` authenticates, verifies pet ownership, validates input, and scopes create/update/delete mutations.
+- Client components provide compact forms and inline editing; PostgreSQL remains the source of truth.

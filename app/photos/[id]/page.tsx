@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ConfigNotice } from "@/components/config-notice";
+import { PhotoAlbumsSection } from "@/components/albums/photo-albums-section";
 import { DeletePhotoForm } from "@/components/photos/delete-photo-form";
 import { PhotoNameEditor } from "@/components/photos/photo-name-editor";
 import { Alert } from "@/components/ui/alert";
@@ -18,6 +19,7 @@ import {
 } from "@/lib/photos/gallery";
 import { getPhotoForUser } from "@/lib/photos/queries";
 import { requireAuthenticatedSupabase } from "@/lib/pets/queries";
+import { listAlbumMembershipsForPhoto } from "@/lib/albums/queries";
 
 type PhotoDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -72,7 +74,10 @@ export default async function PhotoDetailPage({
     );
   }
 
-  const { error, photo } = await getPhotoForUser(parsedId.data, user.id);
+  const [{ error, photo }, albumMemberships] = await Promise.all([
+    getPhotoForUser(parsedId.data, user.id),
+    listAlbumMembershipsForPhoto(parsedId.data, user.id),
+  ]);
 
   if (!photo) {
     notFound();
@@ -177,6 +182,14 @@ export default async function PhotoDetailPage({
           AI classification is not implemented yet. This status only describes
           the current upload/processing state.
         </Alert>
+      </Card>
+
+      <Card>
+        <PhotoAlbumsSection
+          allAlbums={albumMemberships.all}
+          memberships={albumMemberships.memberships}
+          photoId={photo.id}
+        />
       </Card>
 
       <DeletePhotoForm photoId={photo.id} fileName={photo.file_name} />

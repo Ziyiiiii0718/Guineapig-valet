@@ -44,6 +44,20 @@ Migration `supabase/migrations/0004_photo_display_names.sql` was applied to the 
 
 Read-only catalog verification confirmed that `photos.display_name` is nullable `text` with no default. The `photos_display_name_check` constraint permits `NULL` or a trimmed value between 1 and 80 characters. Both existing photo rows remained present with `display_name = NULL`, `photos` still has RLS enabled, and the existing SELECT, INSERT, UPDATE, and DELETE ownership policies remain installed.
 
+## Phase 3 Album Migration Status
+
+Migration `supabase/migrations/0005_private_photo_albums.sql` was applied on 2026-08-25 after a linked dry run confirmed it was the only pending migration. Local and remote migration histories synchronize through `0005`; no reset or earlier-migration edit occurred.
+
+Remote catalog verification confirmed RLS remains enabled on `albums` and `album_photos`, with four album policies and three membership policies. Both composite ownership foreign keys are installed. Existing data remained intact: one pet and four photos were present after migration; the dormant album tables began empty.
+
+A rollback-only two-user database test passed. User A created an album and attached User A's photo. User A could not attach User B's photo. User B could not view, edit, delete, add to, or remove membership from User A's album. All temporary photo, album, and membership rows were rolled back.
+
+## Phase 4 Weight Migration Status
+
+Migration `0006_pet_weight_tracking.sql` was applied on 2026-08-25 after a dry run confirmed it was the only pending migration. It adds a 100–5000 g constraint, composite pet-owner foreign key, and stable history index without resetting data or editing earlier migrations. Local and remote histories synchronize through 0006.
+
+Remote verification confirmed four weight RLS policies, RLS enabled, an empty initial weight table, and preservation of two pets, four photos, and three albums. A rollback-only two-user test confirmed User A could add a record to User A's pet but not User B's pet, while User B could not read, edit, or delete User A's record.
+
 ## Remote Schema Verified
 
 Extensions verified:
@@ -184,3 +198,13 @@ To finish Phase 2A two-user runtime photo-upload checks:
 3. Confirm User B cannot read User A's `photos` row.
 4. Confirm User B cannot create a `photos` row whose `storage_path` starts with User A's ID.
 5. Clean up temporary test rows and objects where safe.
+
+## Phase 5 health records — 2026-08-25
+
+- Linked migration history initially showed `0001`–`0006` synchronized and only `0007_private_pet_health_records.sql` pending.
+- `supabase db push --linked --dry-run` confirmed only migration 0007 would run.
+- Migration 0007 applied successfully without a reset; a follow-up migration list showed local and remote `0001`–`0007` synchronized.
+- The migration added the controlled `record_type`, unified bounded `notes`, composite pet-owner foreign key, and deterministic history index while preserving the legacy columns and rows.
+- A generated two-user test confirmed owner create succeeds; cross-user pet insertion is rejected; another user reads, updates, and deletes zero rows; and the owner's row remains unchanged.
+- Generated pets and health rows were removed through owner-scoped deletes. No service-role key was used. Generated Auth users remain because client-safe credentials cannot administer Auth users.
+- RLS stayed enabled with the existing four owner policies. Migration success plus the two-user test verified the category/relationship constraints and owner isolation.

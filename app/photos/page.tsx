@@ -62,10 +62,7 @@ function Pagination({
   const hasNext = page < pageCount;
 
   return (
-    <nav
-      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-      aria-label="Photo gallery pages"
-    >
+    <nav className="photos-pagination" aria-label="Photo gallery pages">
       <p className="text-secondary text-sm">
         Page {Math.min(page, pageCount)} of {pageCount}
       </p>
@@ -118,49 +115,47 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
   const groups = groupPhotosByTimelineMonth(gallery.photos);
 
   return (
-    <div className="space-y-6">
-      <div className="dashboard-header flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="relative z-10">
+    <div className="photos-page">
+      <header className="photos-page-header">
+        <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="heading-page">Photos</h1>
             <Badge tone={gallery.count > 0 ? "success" : "neutral"}>
               {gallery.count} private
             </Badge>
           </div>
-          <p className="text-secondary mt-2 max-w-2xl text-sm leading-6">
-            Browse your uploaded photos by UTC calendar month. Signed image URLs
-            are created only for this page of results and expire after about 10
-            minutes.
+          <p className="photos-page-intro">
+            Browse your private guinea pig photos by upload date.
           </p>
         </div>
-        <div className="relative z-10 flex flex-wrap gap-2">
+        <div className="photos-page-controls">
           <SortControls sort={sort} />
           <ButtonLink href="/photos/upload">Upload photos</ButtonLink>
         </div>
-      </div>
+      </header>
 
       {params.message === "deleted" ? (
-        <Alert tone="success" className="text-sm">
+        <Alert tone="success" className="photos-page-alert text-sm">
           Photo deleted.
         </Alert>
       ) : null}
 
       {gallery.error ? (
-        <Alert tone="error" role="alert" className="text-sm">
+        <Alert tone="error" role="alert" className="photos-page-alert text-sm">
           We could not load your private photos. Please try again.
         </Alert>
       ) : null}
 
       {!gallery.error && gallery.count === 0 ? (
-        <Card>
-          <div className="empty-state text-sm">
+        <div className="photos-empty-state">
+          <div className="text-sm">
             No uploaded photos yet. Upload a few private guinea-pig photos to
             start your timeline.
           </div>
           <div className="mt-4">
             <ButtonLink href="/photos/upload">Upload photos</ButtonLink>
           </div>
-        </Card>
+        </div>
       ) : null}
 
       {!gallery.error && gallery.count > 0 && page > pageCount ? (
@@ -171,13 +166,15 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
       ) : null}
 
       {!gallery.error && groups.length > 0 ? (
-        <div className="space-y-8">
+        <div className="photos-timeline">
           {groups.map((group) => (
-            <section key={group.id} aria-labelledby={`photos-${group.id}`}>
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <h2 id={`photos-${group.id}`} className="heading-section">
-                  {group.label}
-                </h2>
+            <section
+              className="photos-month"
+              key={group.id}
+              aria-labelledby={`photos-${group.id}`}
+            >
+              <div className="photos-month-heading">
+                <h2 id={`photos-${group.id}`}>{group.label}</h2>
                 <Badge tone="neutral">
                   {group.photos.length}{" "}
                   {group.photos.length === 1 ? "photo" : "photos"}
@@ -189,6 +186,7 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
                     key={photo.id}
                     photo={photo}
                     priority={page === 1 && index < 4}
+                    variant="gallery"
                   />
                 ))}
               </div>

@@ -1,6 +1,6 @@
 # PiggieVault
 
-PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository contains the foundation through the private photo-gallery phase: documentation, a runnable Next.js application shell, Supabase Auth wiring, database planning, authenticated pet-profile CRUD, private pet-avatar storage, private general-photo upload, private gallery browsing, chronological timeline grouping, photo detail, deletion, and honest placeholder UI for future features.
+PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository contains the foundation through custom private albums: authenticated pet-profile CRUD, private photo upload and HEIC conversion, gallery/timeline browsing, editable photo titles, album organization, and honest placeholder UI for future features.
 
 ## Live Demo
 
@@ -23,6 +23,10 @@ Implemented:
 - Private photo detail pages with editable user-facing names, signed image display, original-file metadata, honest AI status, and safe deletion.
 - Dashboard pet summary backed by real private pet data.
 - Dashboard recent-photo previews and entry points for gallery browsing and upload.
+- Custom private albums with create/edit/delete, automatic covers, paginated existing-photo selection, many-to-many membership, and photo-detail membership management.
+- Dashboard album previews and Albums navigation.
+- Private per-pet weight tracking with calendar-date history, latest-change summaries, editing, deletion, and responsive Recharts trends.
+- Private per-pet health history with controlled categories, calendar dates, editing, deletion, filters, pagination, and recent summaries.
 - Server-side pet validation, ownership checks, and age display helpers.
 - Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, HEIC/HEIF original filename preservation, and best-effort Storage cleanup.
 - Environment-variable validation and missing-configuration messaging.
@@ -37,11 +41,8 @@ Implemented:
 
 Planned but not implemented yet:
 
-- Albums.
 - Pet-photo classification.
 - AI review queue.
-- Weight tracking.
-- Health records.
 - AI embeddings and classification infrastructure.
 - Final portfolio polish.
 
@@ -178,6 +179,9 @@ supabase/migrations/0001_initial_schema.sql
 supabase/migrations/0002_pet_avatar_storage.sql
 supabase/migrations/0003_user_photo_upload_storage.sql
 supabase/migrations/0004_photo_display_names.sql
+supabase/migrations/0005_private_photo_albums.sql
+supabase/migrations/0006_pet_weight_tracking.sql
+supabase/migrations/0007_private_pet_health_records.sql
 ```
 
 They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos.
@@ -189,6 +193,12 @@ The current private photo upload supports JPEG, PNG, WEBP, HEIC, and HEIF import
 HEIF is the container format; HEIC is the common HEIF image flavor produced by iPhones. Browsers do not reliably display raw HEIC/HEIF images, so PiggieVault dynamically loads a browser HEIC decoder only when needed, reads the original capture date before conversion when possible, converts the image to JPEG at about 0.9 quality in the browser, and uploads only that JPEG to the private `user-photos` bucket. The database preserves the original filename, while `mime_type`, `file_size`, dimensions, and Storage path describe the stored JPEG. Live Photo `.mov` video components are intentionally deferred and are not uploaded in this phase.
 
 Photo names are editable metadata. `display_name` stores an optional friendly name, `file_name` preserves the original upload name, and `storage_path` remains the stable private UUID object path. Gallery and Dashboard show the custom name when present, otherwise the original filename without its extension, otherwise `Untitled photo`.
+
+Albums are PostgreSQL metadata and join-table relationships, not Storage folders. A photo can appear in multiple albums without copying its private object. Albums sort by most recently updated; photos within an album sort by most recently added with a stable photo-ID tie-breaker. The earliest still-present membership supplies the automatic cover, and empty albums use a PiggieVault placeholder.
+
+Weight records store one canonical integer value in grams from 100–5000 g and a PostgreSQL `date` measurement day. Multiple same-day measurements are allowed and remain deterministically ordered. Latest change is calculated from the two newest measurements and is not a medical assessment.
+
+Health records store controlled categories, a required 120-character title, optional notes up to 4,000 characters, and a timezone-safe PostgreSQL calendar date. They are private record keeping only and do not provide diagnosis or medical recommendations.
 
 The private gallery renders signed image URLs for the current result set only. Gallery signed URLs are short-lived and are not stored in PostgreSQL. Timeline grouping uses a UTC display date: `taken_at` when present, otherwise `uploaded_at`, otherwise `created_at`.
 
@@ -214,6 +224,9 @@ Current tests cover:
 - Pet avatar file validation, fallback rendering, avatar storage-path ownership, and clickable pet-card route generation.
 - Photo upload file validation, HEIC/HEIF detection and mocked conversion, EXIF date parsing, Storage path ownership, and upload metadata validation.
 - Photo gallery display-date fallback, editable-name fallback and validation, sorting, month grouping, pagination, detail ID validation, path ownership, and metadata formatting.
+- Album validation, pagination, cover/empty-card rendering, authenticated ownership checks, multi-photo membership, cross-user rejection, safe membership removal, and delete-album isolation.
+- Weight validation boundaries, calendar-date stability, ordering, latest/previous summaries, mathematical differences, and owner-scoped Server Actions.
+- Health category/title/note/date validation, deterministic ordering, filtering, pagination, and owner-scoped create/edit/delete actions.
 
 Future tests should cover deeper server-action behavior and route behavior with configured Supabase credentials.
 
@@ -221,8 +234,8 @@ Future tests should cover deeper server-action behavior and route behavior with 
 
 - Confirmed-account login requires completing email confirmation for a non-personal test user.
 - The initial database, pet-avatar Storage, and user-photo Storage migrations have been applied to the linked Supabase project.
-- Dashboard pet data and recent private photo previews are real; AI, weight, and health sections remain placeholders or planned actions.
-- Pet profile avatars, general private photo upload, private gallery, timeline grouping, detail view, and deletion are implemented, but albums, weights, health records, and AI classification are not implemented yet.
+- Dashboard pet, photo, album, weight, and recent-health data are real; AI remains planned.
+- Pet profile avatars, private photos, albums, weight tracking, and health records are implemented. AI classification is not implemented yet.
 - Temporary Supabase Auth test users created during remote verification are not deleted because the app does not use a service-role key.
 - AI service does not exist yet.
 

@@ -102,6 +102,8 @@ Learning-document topics: many-to-many relationships.
 
 Completion criteria: Removing from an album does not delete the photo.
 
+Status: Implemented with many-to-many membership, automatic covers, paginated album/photo views, Dashboard and photo-detail integration, and owner-scoped RLS. Custom cover selection and manual drag ordering remain intentionally deferred.
+
 ## Phase 6: Weight Tracking
 
 Objective: Track weight history for each pet.
@@ -122,7 +124,11 @@ Learning-document topics: time-series data and chart-ready queries.
 
 Completion criteria: Users can add and view their own pet weight records.
 
+Status: Implemented with canonical grams, date-only history, add/edit/delete, derived summaries, responsive charting, Dashboard integration, and owner-scoped RLS.
+
 ## Phase 7: Health Records
+
+Status: Implemented in the Phase 5 delivery with private categorized history, editing, deletion, filtering, pagination, pet summaries, and Dashboard summaries. Medical interpretation remains explicitly excluded.
 
 Objective: Store personal health notes without medical diagnosis.
 

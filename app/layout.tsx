@@ -4,6 +4,8 @@ import Link from "next/link";
 import "./globals.css";
 import { MainNav } from "@/components/main-nav";
 import { PageContainer } from "@/components/ui/page-container";
+import { getPublicEnvStatus } from "@/lib/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const fredoka = Fredoka({
   subsets: ["latin"],
@@ -28,11 +30,18 @@ export const metadata: Metadata = {
   description: "Private guinea pig photo albums and care tracking.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let user: { email?: string | null } | null = null;
+  if (getPublicEnvStatus().isConfigured) {
+    const supabase = await createSupabaseServerClient();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  }
+
   return (
     <html
       lang="en"
@@ -45,7 +54,7 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <MainNav />
+        <MainNav user={user} />
         <main id="main-content" className="app-main">
           <PageContainer>{children}</PageContainer>
         </main>
@@ -53,9 +62,9 @@ export default function RootLayout({
           <Link href="/" className="link-primary">
             PiggieVault
           </Link>{" "}
-          has authenticated pet profiles, private avatars, private photo upload,
-          and private gallery browsing live; AI, weight, and health remain
-          planned.
+          has authenticated pet profiles, private avatars, photo upload, gallery
+          browsing, private albums, weight tracking, and private health records
+          live; AI remains planned.
         </footer>
       </body>
     </html>

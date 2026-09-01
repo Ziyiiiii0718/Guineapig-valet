@@ -76,4 +76,15 @@ describe("photo display names", () => {
     expect(screen.getByText("Annie eating hay")).toBeInTheDocument();
     expect(screen.queryByText("IMG_3847.HEIC")).not.toBeInTheDocument();
   });
+
+  it("keeps gallery management in a compact overflow control", () => {
+    render(<PhotoCard photo={photo} variant="gallery" />);
+
+    expect(
+      screen.getByLabelText("More actions for Annie eating hay"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Annie eating hay" }),
+    ).toHaveAttribute("href", `/photos/${photo.id}`);
+  });
 });

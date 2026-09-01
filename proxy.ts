@@ -37,7 +37,8 @@ export async function proxy(request: NextRequest) {
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/pets") ||
-    request.nextUrl.pathname.startsWith("/photos");
+    request.nextUrl.pathname.startsWith("/photos") ||
+    request.nextUrl.pathname.startsWith("/albums");
 
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();

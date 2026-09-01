@@ -11,7 +11,6 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   getPhotoImportKind,
   prepareUserPhotoForUpload,
@@ -433,8 +432,8 @@ export function PhotoUploadForm() {
   const hasUploadablePhotos = photos.some((photo) => photo.status === "ready");
 
   return (
-    <div className="space-y-5">
-      <Card className="photo-upload-card">
+    <div className="photo-uploader">
+      <section className="photo-upload-surface">
         <div
           className={cn(
             "photo-drop-zone focus-ring",
@@ -468,13 +467,19 @@ export function PhotoUploadForm() {
           tabIndex={0}
         >
           <span className="photo-upload-icon" aria-hidden="true" />
-          <div>
-            <h2 className="heading-section">Choose private photos</h2>
-            <p className="text-secondary mt-2 text-sm leading-6">
-              Click or drag images here. JPEG, PNG, WEBP, HEIC, or HEIF, up to{" "}
-              {formatBytes(USER_PHOTO_MAX_SIZE_BYTES)} each and{" "}
-              {USER_PHOTO_MAX_BATCH_SIZE} files per batch.
+          <div className="photo-drop-copy">
+            <h2>Drag &amp; drop your photos here</h2>
+            <p className="photo-drop-browse">
+              or click to <span>browse</span>
             </p>
+            <p className="photo-drop-limits">
+              JPEG, PNG, WEBP, HEIC, or HEIF · Up to{" "}
+              {formatBytes(USER_PHOTO_MAX_SIZE_BYTES)} each ·{" "}
+              {USER_PHOTO_MAX_BATCH_SIZE} files per batch
+            </p>
+            <span className="btn btn-secondary photo-choose-files">
+              Choose files
+            </span>
           </div>
           <input
             ref={inputRef}
@@ -491,20 +496,23 @@ export function PhotoUploadForm() {
           />
         </div>
 
-        <Alert tone="info" className="mt-5 text-sm">
-          Your uploads are private to your account. They are saved for your
-          photo library and are not sent to the future AI service yet.
-        </Alert>
-
         {message ? (
           <Alert tone="warning" role="alert" className="mt-4 text-sm">
             {message}
           </Alert>
         ) : null}
-      </Card>
+      </section>
+
+      <aside className="photo-upload-privacy">
+        <span className="photo-upload-lock" aria-hidden="true" />
+        <div>
+          <strong>Your photos are always private.</strong>
+          <p>Uploads are saved to your private photo library.</p>
+        </div>
+      </aside>
 
       {photos.length > 0 ? (
-        <Card>
+        <section className="photo-upload-queue">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="heading-section">Selected photos</h2>
@@ -573,11 +581,11 @@ export function PhotoUploadForm() {
               </li>
             ))}
           </ul>
-        </Card>
+        </section>
       ) : null}
 
       {uploadedPhotos.length > 0 ? (
-        <Card>
+        <section className="photo-upload-session">
           <h2 className="heading-section">Uploaded in this session</h2>
           <div className="photo-session-grid mt-5">
             {uploadedPhotos.map((photo) => (
@@ -589,7 +597,7 @@ export function PhotoUploadForm() {
               />
             ))}
           </div>
-        </Card>
+        </section>
       ) : null}
     </div>
   );

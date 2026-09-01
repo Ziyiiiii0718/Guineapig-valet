@@ -33,27 +33,29 @@ export default async function PetsPage({
   const { error, pets } = await listPetsForUser(user.id);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="pets-page">
+      <header className="pets-page-header">
         <div>
           <p className="section-kicker">Private pet profiles</p>
-          <h1 className="heading-page mt-2">Your guinea pigs</h1>
-          <p className="text-secondary mt-2 max-w-2xl text-sm leading-6">
-            Keep each piggie profile private to your account. Photos, health,
-            and weight features are still planned for later phases.
+          <h1 className="pets-page-title">Your guinea pigs</h1>
+          <p className="pets-page-intro">
+            Keep each piggie&apos;s profile private and safe. Save photos, track
+            weight, and keep health records together.
           </p>
         </div>
-        <ButtonLink href="/pets/new">Create pet</ButtonLink>
-      </div>
+        <ButtonLink className="pets-create-button" href="/pets/new">
+          <span aria-hidden="true">+</span> Create pet
+        </ButtonLink>
+      </header>
 
       {params?.message === "deleted" ? (
-        <Alert tone="success" role="status" className="text-sm">
+        <Alert tone="success" role="status" className="pets-page-alert text-sm">
           Pet profile deleted.
         </Alert>
       ) : null}
 
       {error ? (
-        <Alert tone="error" role="alert">
+        <Alert tone="error" role="alert" className="pets-page-alert">
           We could not load your pet profiles. Please try again.
         </Alert>
       ) : null}
@@ -73,11 +75,23 @@ export default async function PetsPage({
       ) : null}
 
       {pets.length > 0 ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <section className="pets-composition" aria-label="Your pet profiles">
           {pets.map((pet) => (
             <PetCard key={pet.id} pet={pet} />
           ))}
-        </div>
+        </section>
+      ) : null}
+
+      {!error && pets.length > 0 ? (
+        <aside className="pets-privacy-note">
+          <span className="pets-privacy-lock" aria-hidden="true" />
+          <div>
+            <strong>All pet profiles are private to your account.</strong>
+            <p>
+              Only you can view and manage your piggies&apos; care information.
+            </p>
+          </div>
+        </aside>
       ) : null}
     </div>
   );
