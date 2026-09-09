@@ -15,6 +15,9 @@ import { listWeightsForPet } from "@/lib/weights/queries";
 import { WeightSection } from "@/components/weights/weight-section";
 import { HealthSummary } from "@/components/health/health-summary";
 import { listHealthForPet } from "@/lib/health/queries";
+import { ReferencePhotosSection } from "@/components/references/reference-photos-section";
+import { isAiServiceConfigured } from "@/lib/ai/config";
+import { listReferencesForPet } from "@/lib/references/queries";
 
 function DetailItem({
   label,
@@ -51,10 +54,11 @@ export default async function PetDetailPage({
     notFound();
   }
 
-  const [{ error, pet }, weights, health] = await Promise.all([
+  const [{ error, pet }, weights, health, references] = await Promise.all([
     getPetForUser(parsedPetId.data, user.id),
     listWeightsForPet(parsedPetId.data, user.id),
     listHealthForPet(parsedPetId.data, user.id, { limit: 3 }),
+    listReferencesForPet(parsedPetId.data, user.id),
   ]);
 
   if (error || !pet) {
@@ -117,15 +121,21 @@ export default async function PetDetailPage({
         <Card soft>
           <h2 className="heading-section">Private care workspace</h2>
           <p className="text-secondary mt-2 text-sm leading-6">
-            Reference images and AI classification remain planned. Photos,
-            albums, weight tracking, and health records are available now.
+            Photos, albums, weight tracking, health records, and AI reference
+            embeddings stay private to your account. Photo classification is not
+            implemented yet.
           </p>
-          <div className="empty-state mt-5 text-sm">
-            Profile avatars and photos use private Supabase Storage. AI
-            reference-photo workflows remain a separate future feature.
-          </div>
         </Card>
       </div>
+
+      <Card>
+        <ReferencePhotosSection
+          aiConfigured={isAiServiceConfigured()}
+          petId={pet.id}
+          petName={pet.name}
+          references={references.references}
+        />
+      </Card>
 
       <Card>
         <WeightSection

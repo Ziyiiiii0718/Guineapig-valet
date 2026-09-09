@@ -167,23 +167,29 @@ Authenticated album route
 
 Albums do not create Storage folders or duplicate objects. `album_photos` links one photo to many albums. Deleting an album cascades only through join rows; deleting a photo cleans its memberships through the photo foreign key. Overview albums use recently updated ordering. Album contents use membership creation time descending plus photo ID descending. The automatic cover is the earliest surviving membership, so removal or photo deletion falls back without mutable cover state.
 
-## Future AI Boundary
+## AI Reference-Embedding Boundary
 
 ```text
 Browser
--> Next.js
--> Private Storage
--> Job or AI Service
--> Embedding Comparison
--> Prediction
--> Review Queue
+-> authenticated Next.js Server Action
+-> pet and photo ownership checks
+-> private user-photos download through the user's Supabase session
+-> authenticated byte-only FastAPI /embed request
+-> validated normalized vector and model metadata
+-> owner-scoped pet_reference_photos update under RLS
 ```
 
-The AI service should receive a server-authorized request containing a photo ID, user ID, and storage path or signed temporary access. It should return a prediction status, optional pet ID, confidence, and model version. Failures should mark the photo as `needs_review` instead of blocking the whole UI.
+The AI service receives raw JPEG, PNG, or WEBP bytes only after Next.js has authorized and downloaded an existing private photo. It receives no Supabase key, user ID, pet ID, Storage path, signed URL, or arbitrary remote URL. A server-only bearer token protects the internal endpoint. The response contains one normalized 512-dimensional image embedding plus model name/version metadata; it contains no pet classification.
+
+Reference rows move through `pending`, `processing`, `ready`, or `failed`. Failed relationships remain visible and retryable. Adding several references uses bounded concurrency and preserves partial success. Removing a reference deletes only relationship/embedding metadata and never deletes the photo or Storage object.
 
 ## Boundary Decision
 
-The first web app does not depend on the AI service. This keeps core authentication, CRUD, storage, and RLS work testable before machine-learning complexity is added.
+The web app still does not globally depend on the AI service. Pets, photos, albums, weights, health records, and Dashboard remain usable when AI configuration or deployment is absent; only embedding actions fail gracefully.
+
+## FastAPI embedding service
+
+`ai-service/` isolates model loading, matching OpenCLIP preprocessing, inference, and L2 normalization from Next.js. `ViT-B-32-quickgelu` with `openai` weights produces 512 values intended for later cosine similarity. The QuickGELU variant matches the activation used by those pretrained weights. The model loads lazily once per process rather than once per request. Incoming bytes are decoded in memory and released after the response; they are not written to disk. Health reports process/model readiness without forcing a model download. Production still needs a separately provisioned ML host because the Next.js application deploys to Vercel.
 
 ## Phase 5 health-record architecture
 

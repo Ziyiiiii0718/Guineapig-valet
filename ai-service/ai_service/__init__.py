@@ -1,0 +1,1 @@
+"""PiggieVault image-embedding service."""

@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=77,<85"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "piggievault-ai-service"
+version = "0.1.0"
+description = "Private image-embedding service for PiggieVault"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "numpy>=2,<3",
+  "open-clip-torch>=2.30,<3",
+  "pillow>=11,<13",
+  "pydantic>=2.10,<3",
+  "torch>=2.5,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.15,<2",
+  "pytest>=8.3,<10",
+  "ruff>=0.11,<1",
+]
+
+[tool.setuptools.packages.find]
+include = ["ai_service*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["ai_service"]
+
+[[tool.mypy.overrides]]
+module = ["open_clip", "PIL.*"]
+ignore_missing_imports = true

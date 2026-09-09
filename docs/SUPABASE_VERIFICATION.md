@@ -208,3 +208,17 @@ To finish Phase 2A two-user runtime photo-upload checks:
 - A generated two-user test confirmed owner create succeeds; cross-user pet insertion is rejected; another user reads, updates, and deletes zero rows; and the owner's row remains unchanged.
 - Generated pets and health rows were removed through owner-scoped deletes. No service-role key was used. Generated Auth users remain because client-safe credentials cannot administer Auth users.
 - RLS stayed enabled with the existing four owner policies. Migration success plus the two-user test verified the category/relationship constraints and owner isolation.
+
+## Phase 6 AI reference embeddings — 2026-09-07 to 2026-09-09
+
+- Linked migration history shows local and remote `0001`–`0008` synchronized.
+- Remote catalog checks confirmed all migration-0008 columns, including required `photo_id`, required `embedding_status` with its `pending` default, model/version/dimension/error metadata, and `updated_at`.
+- The remote table has the expected status, dimension, and error-category checks; composite pet/photo owner foreign keys; and unique `(pet_id, photo_id)` duplicate prevention.
+- RLS remains enabled. SELECT and DELETE require `auth.uid() = user_id`; INSERT and UPDATE additionally require both the selected pet and photo to belong to `auth.uid()`.
+- An authenticated, owner-scoped database verification added one reference, expanded the set to three, handled a duplicate idempotently, removed one, preserved the original Gallery photo, left Albums and album membership unchanged, and removed its remaining verification rows.
+- A real cross-owner insert under an authenticated role was rejected with PostgreSQL `42501`. An anonymous synthetic insert was also rejected with `42501`.
+- The pre-migration `PGRST204` failure is gone: zero-row PostgREST reads of `photo_id` and `embedding_status` now succeed, and inserts reach RLS instead of schema-cache rejection.
+- The local FastAPI service was started with matching server-only process environment values. Its health endpoint reported `ready`, and a real existing private Storage photo produced a finite, normalized 512-dimensional `ViT-B-32-quickgelu` / `openai` embedding without retaining a temporary image file.
+- A signed-in user selected a real existing private photo through the reference picker. The Next.js Server Action authenticated the user, matched one selected photo to one owned photo, downloaded the private object, received a successful `/embed` response, and stored the embedding remotely. The UI displayed `Ready`; refresh preserved it and did not show Retry.
+- With FastAPI stopped, a live embedding attempt preserved its reference relationship as `failed` with sanitized `service_unavailable` state and exposed Retry. After FastAPI restarted, Retry updated the same reference to `ready`, displayed `Embedding is ready.`, cleared the failure category, and removed Retry. Remote verification confirmed the embedding exists, both declared and stored dimensions are 512, model/version metadata is present, and pet/photo ownership still matches.
+- A final log audit found that Next.js's development-only LCP warning could echo a signed reference-thumbnail URL. Reference thumbnails now opt into eager loading, which prevents that warning; the affected local log was removed. Application diagnostics remain limited to safe booleans, counts, operation names, database codes, and sanitized categories.

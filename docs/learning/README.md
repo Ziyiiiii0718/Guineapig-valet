@@ -18,3 +18,4 @@ Each document explains a major engineering area in interview-friendly language:
 14. `14-private-photo-albums.md`
 15. `15-pet-weight-tracking.md`
 16. `16-private-pet-health-records.md`
+17. `17-ai-reference-photo-embeddings.md`

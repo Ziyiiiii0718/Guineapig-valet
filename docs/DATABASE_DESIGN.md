@@ -22,7 +22,7 @@ auth.users
 - `profiles`: optional application profile data for an authenticated user.
 - `pets`: guinea pig profiles owned by a user.
 - `photos`: private uploaded photo metadata, including stable Storage path, original filename, optional editable display name, file size, MIME type, dimensions, upload time, taken time, and AI status.
-- `pet_reference_photos`: reference photos for future AI embeddings.
+- `pet_reference_photos`: owner-safe relationships between pets and existing private photos, plus one normalized pgvector embedding and processing/model metadata.
 - `photo_pet_predictions`: AI or manual labels for photos.
 - `albums`: user-created photo collections.
 - `album_photos`: many-to-many join table between albums and photos.
@@ -46,7 +46,7 @@ Reliable multi-pet detection is a future enhancement.
 - Pet deleted: dependent reference photos, weight records, and health records cascade. Photo records remain because a general photo library may outlive one pet profile; predictions referencing the pet set `pet_id` to null. The application performs best-effort cleanup of the pet avatar Storage object.
 - Photo deleted: predictions and album relationships cascade. Storage object deletion must be handled by application/storage logic.
 - Album deleted: album-photo relationships cascade, but original photos remain.
-- Reference photo deleted: the reference row cascades with the pet or can be deleted directly; future storage cleanup should remove or retire the related object.
+- Reference relationship deleted: only the relationship and embedding metadata are removed. The original `photos` row, private Storage object, title, and album memberships remain. Deleting the pet or original photo cascades the relationship.
 
 ## Indexing
 
@@ -62,6 +62,8 @@ See:
 - `supabase/migrations/0004_photo_display_names.sql`
 - `supabase/migrations/0005_private_photo_albums.sql`
 - `supabase/migrations/0006_pet_weight_tracking.sql`
+- `supabase/migrations/0007_private_pet_health_records.sql`
+- `supabase/migrations/0008_ai_reference_photo_embeddings.sql`
 
 ## Current Photo Upload Metadata
 
@@ -98,3 +100,9 @@ Photo deletion is split across Storage and PostgreSQL because they are separate 
 ## Phase 5 health records
 
 Migration `0007_private_pet_health_records.sql` evolves the existing child table with `record_type` and unified `notes`. Categories are constrained to symptom, vet visit, medication, treatment, or general. Titles remain required and limited to 120 characters; notes are limited to 4,000. `record_date` is a calendar date distinct from creation time. A composite `(pet_id, user_id)` foreign key prevents cross-owner relationships, and a deterministic history index supports newest-first reads.
+
+## AI reference embeddings
+
+The initial schema already enabled `vector` and reserved `pet_reference_photos.embedding vector(512)`. Migration 0008 adds `photo_id`, status, error category, model name/version, dimension, and update time. Composite foreign keys `(pet_id, user_id)` and `(photo_id, user_id)` prevent cross-owner relationships. `(pet_id, photo_id)` is unique, which prevents accidental duplicate references while allowing the same underlying photo to be referenced by a different owned pet if appropriate.
+
+The legacy `storage_path` column becomes nullable for compatibility; new reference rows do not populate it. Next.js always resolves the current path from the authorized `photos` row, avoiding a second source of truth. `embedding_status` is `pending`, `processing`, `ready`, or `failed`; errors use a small sanitized category set. A ready row records the 512-value vector and exact model metadata. No classification labels or thresholds are added in this phase.

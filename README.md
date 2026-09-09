@@ -1,6 +1,6 @@
 # PiggieVault
 
-PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository contains the foundation through custom private albums: authenticated pet-profile CRUD, private photo upload and HEIC conversion, gallery/timeline browsing, editable photo titles, album organization, and honest placeholder UI for future features.
+PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository includes authenticated pet and care features plus the Phase 6 foundation for owner-scoped AI reference photos and private image embeddings.
 
 ## Live Demo
 
@@ -27,6 +27,8 @@ Implemented:
 - Dashboard album previews and Albums navigation.
 - Private per-pet weight tracking with calendar-date history, latest-change summaries, editing, deletion, and responsive Recharts trends.
 - Private per-pet health history with controlled categories, calendar dates, editing, deletion, filters, pagination, and recent summaries.
+- Owner-scoped AI reference-photo relationships that reuse existing private gallery objects, with multi-select management, status, retry, and safe removal.
+- A separate authenticated FastAPI service that creates normalized 512-dimensional OpenCLIP image embeddings from server-authorized JPEG/PNG/WEBP bytes without storing raw images.
 - Server-side pet validation, ownership checks, and age display helpers.
 - Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, HEIC/HEIF original filename preservation, and best-effort Storage cleanup.
 - Environment-variable validation and missing-configuration messaging.
@@ -43,8 +45,6 @@ Planned but not implemented yet:
 
 - Pet-photo classification.
 - AI review queue.
-- AI embeddings and classification infrastructure.
-- Final portfolio polish.
 
 ## Main Features
 
@@ -57,7 +57,8 @@ PiggieVault is intended to eventually support:
 - Future custom photo albums.
 - Weight and health history.
 - Reference photos for each pet.
-- Future AI image embedding classification.
+- Private AI reference-photo embeddings.
+- Future image classification and manual review.
 - Manual review and correction for uncertain AI predictions.
 
 ## Technology Stack
@@ -72,7 +73,7 @@ PiggieVault is intended to eventually support:
 - Supabase Storage
 - PostgreSQL Row Level Security
 - Vitest
-- Future Python/FastAPI AI service
+- Python/FastAPI AI service
 
 ## Architecture Summary
 
@@ -85,19 +86,18 @@ Browser
 -> PostgreSQL with Row Level Security
 ```
 
-Future AI upload flow:
+AI reference-embedding flow:
 
 ```text
 Browser
--> Next.js
--> Private Storage
--> Job or AI Service
--> Embedding Comparison
--> Prediction
--> Review Queue
+-> authenticated Next.js Server Action
+-> owner-scoped private Storage download
+-> authenticated FastAPI service
+-> normalized embedding
+-> owner-scoped pgvector reference row
 ```
 
-The web application owns authentication, user flows, and database access. The future AI service will be isolated behind a service boundary and should not be required for the first full-stack features to work.
+The web application owns authentication, authorization, user flows, and Supabase access. The FastAPI service receives only authorized image bytes plus a server-only shared credential; it has no Supabase key and accepts no remote image URLs. Classification remains a later phase, and the core app keeps working when the AI service is unavailable.
 
 ## Repository Structure
 
@@ -105,6 +105,7 @@ The web application owns authentication, user flows, and database access. The fu
 app/                         Next.js routes, layout, auth actions
 components/                  Reusable UI components
 lib/                         Environment, validation, Supabase, and AI boundary types
+ai-service/                  Separate FastAPI/OpenCLIP embedding service
 supabase/migrations/         SQL schema and RLS policies
 docs/                        Architecture, database, security, roadmap, decisions
 docs/learning/               Interview-focused learning documents
@@ -128,6 +129,8 @@ pnpm dev
 
 Then add real Supabase values to `.env.local`.
 
+To run the optional local embedding service, follow [the AI service setup](ai-service/README.md) and add matching server-only `AI_SERVICE_URL` and `AI_SERVICE_TOKEN` values to `.env.local`.
+
 ## Environment Variables
 
 Browser-safe:
@@ -138,7 +141,12 @@ Browser-safe:
 Never commit real credentials.
 The code also accepts legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a fallback for existing local setups. New setup should use `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 
-Do not put Supabase secret keys or service-role keys in `NEXT_PUBLIC_` variables. This Phase 1A app does not require a service-role key.
+Server-only AI connection values:
+
+- `AI_SERVICE_URL`
+- `AI_SERVICE_TOKEN`
+
+Do not put Supabase secret keys, service-role keys, or the AI service token in `NEXT_PUBLIC_` variables. The AI service does not receive Supabase credentials.
 
 ## Supabase Setup
 
@@ -182,9 +190,10 @@ supabase/migrations/0004_photo_display_names.sql
 supabase/migrations/0005_private_photo_albums.sql
 supabase/migrations/0006_pet_weight_tracking.sql
 supabase/migrations/0007_private_pet_health_records.sql
+supabase/migrations/0008_ai_reference_photo_embeddings.sql
 ```
 
-They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos.
+They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos. Migration 0008 evolves the dormant reference table into a relationship with existing photos and adds embedding processing/model metadata. It is applied to the linked project, whose migration history is synchronized through 0008.
 
 ## Photo Upload Limits
 
@@ -227,6 +236,8 @@ Current tests cover:
 - Album validation, pagination, cover/empty-card rendering, authenticated ownership checks, multi-photo membership, cross-user rejection, safe membership removal, and delete-album isolation.
 - Weight validation boundaries, calendar-date stability, ordering, latest/previous summaries, mathematical differences, and owner-scoped Server Actions.
 - Health category/title/note/date validation, deterministic ordering, filtering, pagination, and owner-scoped create/edit/delete actions.
+- Reference-photo selection validation, duplicate/cross-owner rejection, add/remove/retry status behavior, malformed embedding responses, model metadata, and unavailable-service handling.
+- FastAPI health/auth/image/error/model-contract behavior using a mocked model boundary, so normal tests do not download large weights.
 
 Future tests should cover deeper server-action behavior and route behavior with configured Supabase credentials.
 
@@ -234,10 +245,11 @@ Future tests should cover deeper server-action behavior and route behavior with 
 
 - Confirmed-account login requires completing email confirmation for a non-personal test user.
 - The initial database, pet-avatar Storage, and user-photo Storage migrations have been applied to the linked Supabase project.
-- Dashboard pet, photo, album, weight, and recent-health data are real; AI remains planned.
+- Dashboard pet, photo, album, weight, and recent-health data are real; AI classification remains planned.
 - Pet profile avatars, private photos, albums, weight tracking, and health records are implemented. AI classification is not implemented yet.
 - Temporary Supabase Auth test users created during remote verification are not deleted because the app does not use a service-role key.
-- AI service does not exist yet.
+- Production AI embedding is not available until the separate FastAPI service is deployed and server-only AI environment values are configured.
+- Final photo classification and the AI review queue are not implemented.
 
 ## Security Notes
 
@@ -249,6 +261,8 @@ Future tests should cover deeper server-action behavior and route behavior with 
 - Pet avatars are stored in a private Supabase Storage bucket under `<user-id>/<pet-id>/...` paths. Storage policies restrict authenticated users to their own top-level folder, and pages render temporary signed URLs.
 - General photos are stored in a separate private `user-photos` bucket under `<user-id>/<year>/<month>/...` paths. The database stores object paths and metadata, not permanent public URLs. Gallery and detail pages create temporary signed URLs only after querying the authenticated user's own rows.
 - Frontend filtering is not considered sufficient authorization.
+- Reference actions verify both pet and photo ownership, while composite foreign keys and RLS enforce the same owner relationship in PostgreSQL.
+- Next.js downloads an authorized Storage object and sends bytes—not a signed URL—to the AI service. The service accepts no arbitrary URL, stores no raw image, logs no image bytes, and has no Supabase service-role key.
 
 ## Roadmap
 

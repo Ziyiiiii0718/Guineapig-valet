@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+.pnpm-store/
 
 # Next.js
 .next/
@@ -34,6 +35,17 @@ Thumbs.db
 
 # generated docs or temporary exports
 *.tmp
+
+# Python AI service
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.model-cache/
+ai-service/model-cache/
 
 # Supabase CLI local project metadata
 supabase/.temp/

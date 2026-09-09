@@ -87,7 +87,15 @@ Album Server Actions derive the current user from the server-side Supabase sessi
 
 Deleting an album issues no Storage operation and no photo-table delete. PostgreSQL cascades from the album only to its membership rows. Removing a membership similarly deletes only one `album_photos` row.
 
-Reference-photo uploads and AI classification remain separate future phases.
+AI classification remains a future phase.
+
+## AI reference-photo authorization
+
+Reference-photo Server Actions authenticate with the existing Supabase cookie session, verify the requested pet under the current owner, and load every selected photo through the same owner. Forms never submit a trusted `user_id` or Storage path. PostgreSQL RLS repeats the `auth.uid()` rule, while composite pet-owner and photo-owner foreign keys make a cross-user relationship invalid even if application validation regresses. A unique pet/photo key prevents duplicates.
+
+Next.js obtains the Storage path only from the authorized `photos` row, checks its owner prefix, and downloads through the private bucket using the user's session. It sends only in-memory image bytes and MIME type to the AI service. Signed URLs, image bytes, and embedding values are not logged. Removing a reference issues no Storage or `photos` deletion.
+
+The FastAPI `/embed` endpoint requires a server-only bearer token shared through `AI_SERVICE_TOKEN`; it is never named `NEXT_PUBLIC_*` or sent to browser code. The service has no Supabase key and cannot bypass RLS. It accepts only raw JPEG/PNG/WEBP bodies, never a remote URL, which avoids an SSRF fetch surface. Images are decoded and processed in memory without local persistence. User-visible failures are sanitized categories rather than Python or PyTorch traces.
 
 ## Private Weight Records
 

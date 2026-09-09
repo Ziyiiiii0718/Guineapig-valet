@@ -168,6 +168,8 @@ Learning-document topics: embeddings and AI service boundaries.
 
 Completion criteria: Reference photos can be stored and queued for embedding.
 
+Status: Implemented and verified as Phase 6 of the delivery sequence. Existing private photos can be linked to an owned pet without copying Storage objects, processed through a separate authenticated FastAPI/OpenCLIP service, and tracked as pending, processing, ready, or failed with retry. The additive migration is applied remotely. A real private photo produced a stored 512-dimensional embedding, persisted as ready after refresh, failed honestly while the service was unavailable, and recovered to ready through Retry after the service restarted.
+
 ## Phase 9: AI Classification and Review Queue
 
 Objective: Classify uploaded photos and support manual correction.

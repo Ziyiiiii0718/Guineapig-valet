@@ -21,3 +21,6 @@ export type AiServiceError = {
   code: "temporary_failure" | "invalid_image" | "service_unavailable";
   message: string;
 };
+
+export type ReferenceEmbeddingStatus =
+  "pending" | "processing" | "ready" | "failed";
