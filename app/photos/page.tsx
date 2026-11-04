@@ -14,6 +14,7 @@ import {
 } from "@/lib/photos/gallery";
 import { listPhotosForUser } from "@/lib/photos/queries";
 import { requireAuthenticatedSupabase } from "@/lib/pets/queries";
+import { listPredictionSummariesForPhotos } from "@/lib/ai/prediction-queries";
 
 type PhotosPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -111,6 +112,10 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
   }
 
   const gallery = await listPhotosForUser({ page, sort, userId: user.id });
+  const predictions = await listPredictionSummariesForPhotos(
+    gallery.photos.map((photo) => photo.id),
+    user.id,
+  );
   const pageCount = Math.max(1, Math.ceil(gallery.count / gallery.pageSize));
   const groups = groupPhotosByTimelineMonth(gallery.photos);
 
@@ -129,6 +134,9 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
           </p>
         </div>
         <div className="photos-page-controls">
+          <ButtonLink href="/review" variant="secondary">
+            Review AI
+          </ButtonLink>
           <SortControls sort={sort} />
           <ButtonLink href="/photos/upload">Upload photos</ButtonLink>
         </div>
@@ -185,6 +193,7 @@ export default async function PhotosPage({ searchParams }: PhotosPageProps) {
                   <PhotoCard
                     key={photo.id}
                     photo={photo}
+                    prediction={predictions.get(photo.id) ?? null}
                     priority={page === 1 && index < 4}
                     variant="gallery"
                   />

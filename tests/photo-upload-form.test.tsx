@@ -14,11 +14,16 @@ const photoUploadActionMocks = vi.hoisted(() => ({
   finalize: vi.fn(),
   initialize: vi.fn(),
 }));
+const analyzeUploadedPhotoActionMock = vi.hoisted(() => vi.fn());
 const uploadToSignedUrlMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/actions/photos", () => ({
   finalizePhotoUploadAction: photoUploadActionMocks.finalize,
   initializePhotoUploadsAction: photoUploadActionMocks.initialize,
+}));
+
+vi.mock("@/app/actions/classification", () => ({
+  analyzeUploadedPhotoAction: analyzeUploadedPhotoActionMock,
 }));
 
 vi.mock("@/lib/photos/heic", async (importOriginal) => ({
@@ -59,6 +64,7 @@ describe("photo upload form preparation", () => {
       photoId: "photo-id",
       status: "uploaded",
     });
+    analyzeUploadedPhotoActionMock.mockResolvedValue({ status: "success" });
   });
 
   it("moves a newly selected HEIC file from converting to ready", async () => {
@@ -131,5 +137,6 @@ describe("photo upload form preparation", () => {
         }),
       );
     });
+    expect(analyzeUploadedPhotoActionMock).toHaveBeenCalledWith("photo-id");
   });
 });

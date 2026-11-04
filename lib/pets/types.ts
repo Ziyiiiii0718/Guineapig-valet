@@ -3,6 +3,7 @@ export const PET_SEX_VALUES = ["female", "male", "unknown"] as const;
 export type PetSex = (typeof PET_SEX_VALUES)[number];
 
 export type Pet = {
+  avatar_revision?: number;
   birth_date: string;
   created_at: string;
   disliked_foods: string | null;

@@ -72,11 +72,31 @@ The existing schema already defines deletion rules:
 - photo records remain because a general photo library may outlive one pet profile;
 - predictions that referenced the pet set `pet_id` to null.
 
-Because those later features are not populated yet, Phase 1B does not add extra deletion machinery.
+### Transactional deletion (finalization phase)
+
+Migration `0011_transactional_pet_deletion.sql` replaces the application's sequence of prediction updates and a later pet delete with one `delete_pet_transaction` RPC. It runs as the authenticated caller, scopes the pet to `auth.uid()`, locks the pet row, checks the typed name against the current stored name, then deletes it. All existing RLS policies remain in force. If the pet is absent, already deleted, or owned by someone else, the RPC returns the same empty-of-private-data `absent` outcome. Repeated requests therefore succeed as a no-op without revealing another owner's pet.
+
+A BEFORE DELETE trigger performs label cleanup in that same transaction, including for direct owner-authorized deletes. It removes the pet from candidate, suggested, and confirmed ID arrays while keeping candidate scores and reference counts aligned. If the last suggested pet disappears, the suggestion becomes Unknown. If the only human-confirmed pet disappears, review becomes pending again, the confirmation flag/time are cleared, and the shared photo's summary status becomes `needs_review`. Remaining confirmed pets and explicit human-confirmed Unknown are preserved. The legacy `pet_id` becomes null. Model metadata, confidence scores for remaining candidates, and classification processing state are not recomputed.
+
+The database then cascades that pet's reference relationships, health records and weight records. General photos, their bytes, album memberships and album covers stay intact, as do other pets' references to those same photos. Any error, even after earlier prediction updates, rolls the entire transaction back.
+
+Array labels do not have ordinary foreign keys. A prediction-write trigger therefore checks and takes KEY SHARE locks on the referenced owned pet rows. If a prediction write commits first, deletion waits and then removes its labels. If deletion commits first, the late write fails rather than recreating dangling labels. The delete trigger requires READ COMMITTED isolation so it sees writes committed while waiting. Concurrent overlapping transactions can still deadlock; PostgreSQL aborts one transaction completely and the caller can safely retry. This does not alter the classifier's inference algorithm.
+
+### Storage boundary and operational limits
+
+Pet deletion retains avatar bytes, as do avatar replacement and removal. This prevents reference-check/deletion races. Private orphan bytes require coordinated future maintenance; see [avatar storage](10-pet-avatar-storage.md). General photo deletion continues using migration 0010’s separate durable workflow.
+
+The database transaction cannot include an in-flight external AI service call. A late prediction referencing the deleted pet is rejected and may need retry. Separately issued classification/review status writes are not made transactional by this change; the prediction label arrays and review fields remain the authoritative identity state.
+
+### Deployment order and verification
+
+Apply migrations 0001–0009, then **0010**, then **0011**, before deploying the updated actions. No migration is applied by the application or by this task. If 0011 is missing, pet deletion reports failure without falling back to the unsafe multi-request sequence. Existing malformed data is not silently repaired; a conflicting constraint or invalid label makes deletion fail safely for investigation.
+
+Run `python3 tests/database/run-pet-deletion.py` against the dedicated disposable container described in `run-photo-deletion.py`. The runner first executes the complete migration 0010 suite, then tests pet deletion, full-row rollback after injected prediction/delete failures, RLS, exact-name confirmation, label-array alignment, shared-photo preservation, relationship cascades, direct/repeated deletion, and real concurrent label writes/deletion. It never accepts a production URL or credentials. Action tests in `tests/pet-deletion.test.ts` cover RPC failures, uncertain responses, retries, authorization, and avatar retention.
 
 ## 13. Testing Strategy
 
-Local tests cover pet validation, allowed sex values, optional field normalization, future birth-date rejection, date-only age calculation, and a small ownership helper. Full two-user remote RLS testing still needs stable confirmed test users or a dedicated integration-test setup.
+Local tests cover pet validation, allowed sex values, optional field normalization, future birth-date rejection, date-only age calculation, ownership, and deletion actions. The disposable PostgreSQL suite tests actual transaction rollback, RLS and locking with synthetic data. Real Supabase HTTP/Storage behavior still requires a staging smoke test.
 
 ## 14. Common Bugs
 

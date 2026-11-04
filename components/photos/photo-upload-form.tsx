@@ -8,6 +8,7 @@ import {
   initializePhotoUploadsAction,
   type PhotoUploadFileRequest,
 } from "@/app/actions/photos";
+import { analyzeUploadedPhotoAction } from "@/app/actions/classification";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -339,6 +340,12 @@ export function PhotoUploadForm() {
           : item,
       ),
     );
+
+    if (finalResult.status === "uploaded" && finalResult.photoId) {
+      void analyzeUploadedPhotoAction(finalResult.photoId).catch(
+        () => undefined,
+      );
+    }
   }
 
   function uploadReadyPhotos() {

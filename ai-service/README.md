@@ -1,8 +1,9 @@
 # PiggieVault AI service
 
 This FastAPI service creates normalized image embeddings for already-authorized
-private PiggieVault photos. It does not classify photos, know pet names, access
-Supabase, fetch URLs, or persist incoming image bytes.
+private PiggieVault photos. Phase 7 classification remains in one canonical
+Next.js server module; FastAPI does not know pet names, access Supabase, fetch
+URLs, or persist incoming image bytes.
 
 ## Local setup
 
@@ -51,8 +52,8 @@ weights.
 - Preprocessing: OpenCLIP's matching resize, center crop, RGB conversion, and
   channel normalization
 - Output: L2-normalized finite vector
-- Intended later comparison: cosine similarity (no thresholds are selected in
-  this phase)
+- Comparison: the Next.js classifier uses cosine similarity and centrally
+  versioned provisional thresholds; FastAPI performs no label decision.
 
 Production still requires choosing and provisioning a separate Python/ML host.
 The Vercel-hosted Next.js app must point `AI_SERVICE_URL` at that private service

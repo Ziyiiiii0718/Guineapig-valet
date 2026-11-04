@@ -14,7 +14,8 @@ Authenticated upload page
 -> server creates owner-scoped signed upload requests
 -> browser uploads directly to private Storage
 -> server validates metadata and inserts the photo row
--> if insertion fails, server best-effort removes the uploaded object
+-> on duplicate or uncertain insertion, server reads the existing owner-scoped row
+-> if no row can be confirmed, return failure and retain the private object
 ```
 
 The server derives `user_id` from the authenticated session. The browser never submits a trusted owner ID.
@@ -41,7 +42,7 @@ The path starts with the authenticated user ID so Storage policies can enforce o
 
 This feature uploads files directly from the browser to Supabase Storage using signed upload tokens. That keeps large image bytes out of Next.js server actions, which is better for serverless deployments where request body size, memory, and timeout limits can be tight.
 
-The trade-off is that Storage and PostgreSQL are two separate systems. If Storage succeeds but the database insert fails, cleanup is best effort instead of a single transaction.
+The trade-off is that Storage and PostgreSQL are two separate systems. If Storage succeeds but the database insert fails, the object is retained because another request may already have saved it.
 
 ## Signed Uploads and Signed Reads
 
@@ -111,11 +112,13 @@ If no reliable timestamp exists, PiggieVault stores the upload timestamp as `tak
 
 One failed file should not make successful files look failed. Each selected file has its own status: preparing, converting HEIC, ready, uploading, uploaded, failed, or invalid.
 
-If HEIC/HEIF conversion fails, no signed upload is requested, no Storage object is created, and no database row is inserted. If upload fails before Storage succeeds, no database row is created. If Storage succeeds but metadata insertion fails, the server tries to delete the object. If cleanup fails, an orphaned private object may remain for later maintenance, but the app does not create a misleading row.
+If HEIC/HEIF conversion fails, no signed upload is requested, no Storage object is created, and no database row is inserted. If upload fails before Storage succeeds, no database row is created. If Storage succeeds but metadata insertion fails, the server checks for an existing row for the authenticated owner and exact path. If the row cannot be confirmed, it returns failure and retains the private object for a safe retry.
 
 ## Idempotency and Duplicate Prevention
 
-Each object path uses a random UUID and upload buttons are disabled while active. That avoids object overwrites and accidental duplicate submissions in normal use. Stronger idempotency keys can be added later if uploads become resumable or backgrounded.
+The existing unique `(user_id, storage_path)` database constraint makes the owner and object path the idempotency key. Repeated or concurrent finalizations return the same photo ID after a duplicate insert, without overwriting metadata or AI state. A lost insert response is reconciled by reading that same key through the authenticated, RLS-protected client.
+
+Finalization never deletes Storage objects, including on invalid metadata or failed database reads. A check followed by deletion would still race with another insert. The trade-off is that failed uploads can leave private orphan objects. Safe automatic reclamation requires a separate upload lifecycle that prevents later finalization while cleanup is in progress; an age threshold or reference check alone is insufficient. No migration is needed for this fix; it relies on the existing unique constraint in migration 0001.
 
 ## Serverless Deployment Considerations
 
@@ -129,14 +132,14 @@ Direct browser uploads avoid pushing large files through Vercel functions. The s
 - Reusing original filenames in Storage paths.
 - Forgetting per-file error states in multi-file uploads.
 - Creating database rows before Storage succeeds.
-- Not cleaning up Storage objects when metadata insertion fails.
+- Deleting Storage objects on failure when another request may have saved them.
 - Relying only on frontend validation.
 - Treating uploaded photos as AI-classified before any AI service exists.
 - Forgetting that Storage policies and table RLS are separate protections.
 
 ## Testing Strategy
 
-Useful automated tests cover MIME allowlists, HEIC/HEIF detection, uppercase extensions, empty MIME handling, disguised invalid files, mocked conversion, converted JPEG metadata, original filename preservation, taken-date preservation, rejected file types, size and batch limits, path ownership, metadata validation, EXIF fallback behavior, unauthenticated initialization, mixed-format batches, gallery compatibility, and cleanup after metadata failure. Remote integration tests should use non-personal test users and generated images.
+Useful automated tests cover MIME allowlists, HEIC/HEIF detection, uppercase extensions, empty MIME handling, disguised invalid files, mocked conversion, converted JPEG metadata, original filename preservation, taken-date preservation, rejected file types, size and batch limits, path ownership, metadata validation, EXIF fallback behavior, unauthenticated initialization, mixed-format batches, gallery compatibility, and retention after metadata failure. Remote integration tests should use non-personal test users and generated images.
 
 ## Interview Questions
 
@@ -153,7 +156,7 @@ Q: What protects photo metadata?
 A: PostgreSQL RLS allows access only when `photos.user_id = auth.uid()`, and the server always derives `user_id` from the session.
 
 Q: What happens if database insertion fails after upload?
-A: The server tries to remove the uploaded object and returns a friendly per-file failure message.
+A: The server returns the existing photo if it can confirm one; otherwise it retains the object and returns a per-file failure for safe retry.
 
 Q: Why convert HEIC in the browser?
 A: Browsers do not consistently display HEIC, and sending large image bodies through server actions is a poor fit for serverless limits. Browser-side conversion keeps the server small and stores a gallery-compatible JPEG.
@@ -163,7 +166,7 @@ A: It honestly says the photo was received but has not been analyzed or classifi
 
 ## 60-Second Explanation
 
-PiggieVault private photo upload uses a separate private Supabase Storage bucket named `user-photos`. The server verifies the current Supabase session, creates a safe path under that user's ID, and returns a signed upload token. The browser uploads the image directly to Storage, then the server validates and saves metadata in the RLS-protected `photos` table. The app allows JPEG, PNG, WEBP, HEIC, and HEIF imports up to 10 MB, with 10 files per batch. HEIC and HEIF are converted to JPEG in the browser before upload, preserving the original filename in metadata. EXIF capture dates are used when available, otherwise upload time is stored. If Storage succeeds but the database insert fails, the server tries to clean up the object. No AI classification, albums, or Live Photo video support is implied yet.
+PiggieVault private photo upload uses a separate private Supabase Storage bucket named `user-photos`. The server verifies the current Supabase session, creates a safe path under that user's ID, and returns a signed upload token. The browser uploads the image directly to Storage, then the server validates and saves metadata in the RLS-protected `photos` table. The app allows JPEG, PNG, WEBP, HEIC, and HEIF imports up to 10 MB, with 10 files per batch. HEIC and HEIF are converted to JPEG in the browser before upload, preserving the original filename in metadata. EXIF capture dates are used when available, otherwise upload time is stored. If a database result is uncertain, the server checks for an existing photo and retains the Storage object. No AI classification, albums, or Live Photo video support is implied yet.
 
 ## Vocabulary
 

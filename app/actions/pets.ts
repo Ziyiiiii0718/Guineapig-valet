@@ -7,7 +7,7 @@ import {
   buildPetAvatarPath,
   getPetAvatarValidationError,
   isAllowedPetAvatarMimeType,
-  isPetAvatarPathForUser,
+  isPetAvatarPathForPet,
   PET_AVATAR_BUCKET,
 } from "@/lib/pets/avatar";
 import { isOwnedByAuthenticatedUser } from "@/lib/pets/ownership";
@@ -29,7 +29,15 @@ export type PetActionState = {
 
 export type PetAvatarActionState = {
   message?: string;
-  status: "idle" | "error";
+  revision?: number;
+  status: "idle" | "error" | "success";
+};
+
+export type PetAvatarUploadInput = {
+  petId: string;
+  expectedRevision: number;
+  mimeType: string;
+  size: number;
 };
 
 function validationErrorState(
@@ -104,7 +112,7 @@ async function getOwnedPetForMutation(
 ) {
   const { data: pet, error } = await supabase
     .from("pets")
-    .select("id,name,profile_photo_path,user_id")
+    .select("id,name,profile_photo_path,user_id,avatar_revision")
     .eq("id", petId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -114,18 +122,6 @@ async function getOwnedPetForMutation(
   }
 
   return pet;
-}
-
-async function removePetAvatarObject(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  path: string | null,
-  userId: string,
-) {
-  if (!path || !isPetAvatarPathForUser(path, userId)) {
-    return;
-  }
-
-  await supabase.storage.from(PET_AVATAR_BUCKET).remove([path]);
 }
 
 export async function createPetAction(
@@ -257,104 +253,176 @@ export async function updatePetAction(
   redirect(`/pets/${parsedPetId.data}?message=updated`);
 }
 
-export async function uploadPetAvatarAction(
-  _previousState: PetAvatarActionState,
-  formData: FormData,
-): Promise<PetAvatarActionState> {
-  const petId = String(formData.get("petId") ?? "");
-  const parsedPetId = petIdSchema.safeParse(petId);
+function validAvatarRevision(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 2147483647;
+}
 
-  if (!parsedPetId.success) {
-    return {
-      message: "We could not find that pet profile.",
-      status: "error",
-    };
-  }
-
-  const file = formData.get("avatar");
-
-  if (!(file instanceof File)) {
-    return {
-      message: "Choose a JPEG, PNG, or WEBP image.",
-      status: "error",
-    };
-  }
-
-  const validationError = getPetAvatarValidationError(file);
-
-  if (validationError || !isAllowedPetAvatarMimeType(file.type)) {
-    return {
-      message: validationError ?? "Avatar must be a JPEG, PNG, or WEBP image.",
-      status: "error",
-    };
-  }
-
-  const { error: authError, supabase, user } = await getAuthenticatedUser();
-
-  if (authError || !supabase || !user) {
-    return {
-      message: authError ?? "Please log in to manage pet profiles.",
-      status: "error",
-    };
-  }
-
-  const pet = await getOwnedPetForMutation(supabase, parsedPetId.data, user.id);
-
-  if (!pet) {
-    return {
-      message: "We could not find that pet profile.",
-      status: "error",
-    };
-  }
-
-  const avatarPath = buildPetAvatarPath({
-    mimeType: file.type,
-    petId: pet.id,
-    uniqueId: crypto.randomUUID(),
-    userId: user.id,
-  });
-
-  const { error: uploadError } = await supabase.storage
-    .from(PET_AVATAR_BUCKET)
-    .upload(avatarPath, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (uploadError) {
-    return {
-      message: "We could not upload that profile photo. Please try again.",
-      status: "error",
-    };
-  }
-
-  const { error: updateError } = await supabase
-    .from("pets")
-    .update({
-      profile_photo_path: avatarPath,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", pet.id)
-    .eq("user_id", user.id);
-
-  if (updateError) {
-    await removePetAvatarObject(supabase, avatarPath, user.id);
-
-    return {
-      message: "We could not save that profile photo. Please try again.",
-      status: "error",
-    };
-  }
-
-  if (pet.profile_photo_path !== avatarPath) {
-    await removePetAvatarObject(supabase, pet.profile_photo_path, user.id);
-  }
-
+function revalidateAvatarPaths(petId: string) {
   revalidatePath("/dashboard");
   revalidatePath("/pets");
-  revalidatePath(`/pets/${pet.id}`);
-  revalidatePath(`/pets/${pet.id}/edit`);
-  redirect(`/pets/${pet.id}/edit?message=avatar-updated`);
+  revalidatePath(`/pets/${petId}`);
+  revalidatePath(`/pets/${petId}/edit`);
+}
+
+export async function initializePetAvatarUploadAction(
+  input: PetAvatarUploadInput,
+): Promise<PetAvatarActionState & { path?: string; token?: string }> {
+  const validation = getPetAvatarValidationError({
+    size: input.size,
+    type: input.mimeType,
+  });
+  if (
+    !petIdSchema.safeParse(input.petId).success ||
+    !validAvatarRevision(input.expectedRevision)
+  ) {
+    return {
+      status: "error",
+      message: "Refresh the pet profile and try again.",
+    };
+  }
+  if (validation || !isAllowedPetAvatarMimeType(input.mimeType)) {
+    return {
+      status: "error",
+      message: validation ?? "Unsupported avatar type.",
+    };
+  }
+  try {
+    const { error, supabase, user } = await getAuthenticatedUser();
+    if (error || !supabase || !user)
+      return { status: "error", message: error ?? "Please log in." };
+    const pet = await getOwnedPetForMutation(supabase, input.petId, user.id);
+    if (!pet)
+      return {
+        status: "error",
+        message: "We could not find that pet profile.",
+      };
+    if (pet.avatar_revision !== input.expectedRevision)
+      return {
+        status: "error",
+        message:
+          "The profile photo changed elsewhere. Refresh before uploading.",
+      };
+    const path = buildPetAvatarPath({
+      userId: user.id,
+      petId: input.petId,
+      uniqueId: crypto.randomUUID(),
+      mimeType: input.mimeType,
+    });
+    const result = await supabase.storage
+      .from(PET_AVATAR_BUCKET)
+      .createSignedUploadUrl(path, { upsert: false });
+    if (result.error || !result.data?.token)
+      return {
+        status: "error",
+        message: "We could not prepare the upload. Please try again.",
+      };
+    return { status: "success", path, token: result.data.token };
+  } catch {
+    return {
+      status: "error",
+      message: "We could not prepare the upload. Please try again.",
+    };
+  }
+}
+
+async function savePetAvatar(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  petId: string,
+  expectedRevision: number,
+  path: string | null,
+): Promise<PetAvatarActionState> {
+  const { data, error } = await supabase
+    .rpc("set_pet_avatar", {
+      target_pet_id: petId,
+      expected_revision: expectedRevision,
+      target_avatar_path: path,
+    })
+    .returns<Array<{ outcome: string; revision: number }>>()
+    .single();
+  if (error || !data)
+    return {
+      status: "error",
+      message: "We could not confirm the profile photo change. Please retry.",
+    };
+  if (data.outcome === "conflict")
+    return {
+      status: "error",
+      message:
+        "The profile photo changed elsewhere. Refresh before trying again.",
+    };
+  if (data.outcome !== "saved")
+    return { status: "error", message: "We could not find that pet profile." };
+  revalidateAvatarPaths(petId);
+  return {
+    status: "success",
+    revision: data.revision,
+    message: path
+      ? "Profile photo updated."
+      : "Profile photo removed. The fallback avatar is back.",
+  };
+}
+
+export async function finalizePetAvatarUploadAction(
+  input: PetAvatarUploadInput & { path: string },
+): Promise<PetAvatarActionState> {
+  const validation = getPetAvatarValidationError({
+    size: input.size,
+    type: input.mimeType,
+  });
+  if (
+    !petIdSchema.safeParse(input.petId).success ||
+    !validAvatarRevision(input.expectedRevision) ||
+    validation
+  ) {
+    return { status: "error", message: validation ?? "Invalid avatar upload." };
+  }
+  try {
+    const { error, supabase, user } = await getAuthenticatedUser();
+    if (error || !supabase || !user)
+      return { status: "error", message: error ?? "Please log in." };
+    if (!isPetAvatarPathForPet(input.path, user.id, input.petId))
+      return { status: "error", message: "Invalid avatar upload path." };
+    const pet = await getOwnedPetForMutation(supabase, input.petId, user.id);
+    if (!pet)
+      return {
+        status: "error",
+        message: "We could not find that pet profile.",
+      };
+    // Verify the object exists and validate Storage's metadata, not just the
+    // browser claim. No image bytes pass through a Server Action request.
+    const { data: object, error: objectError } = await supabase.storage
+      .from(PET_AVATAR_BUCKET)
+      .info(input.path);
+    if (
+      objectError ||
+      !object ||
+      object.size !== input.size ||
+      object.contentType !== input.mimeType ||
+      getPetAvatarValidationError({
+        size: object.size ?? 0,
+        type: object.contentType ?? "",
+      })
+    ) {
+      return {
+        status: "error",
+        message:
+          "The upload is incomplete or invalid. Retry, or select the image again.",
+      };
+    }
+    // Never delete on success or failure: this path may already be active,
+    // and a reference check followed by deletion would still have a race.
+    return await savePetAvatar(
+      supabase,
+      input.petId,
+      input.expectedRevision,
+      input.path,
+    );
+  } catch {
+    return {
+      status: "error",
+      message: "We could not confirm the upload. Please retry.",
+    };
+  }
 }
 
 export async function removePetAvatarAction(
@@ -362,57 +430,29 @@ export async function removePetAvatarAction(
   formData: FormData,
 ): Promise<PetAvatarActionState> {
   const petId = String(formData.get("petId") ?? "");
-  const parsedPetId = petIdSchema.safeParse(petId);
-
-  if (!parsedPetId.success) {
+  const revisionText = String(formData.get("revision") ?? "");
+  const revision = Number(revisionText);
+  if (
+    !petIdSchema.safeParse(petId).success ||
+    !/^\d+$/.test(revisionText) ||
+    !validAvatarRevision(revision)
+  ) {
     return {
-      message: "We could not find that pet profile.",
       status: "error",
+      message: "Refresh the pet profile and try again.",
     };
   }
-
-  const { error: authError, supabase, user } = await getAuthenticatedUser();
-
-  if (authError || !supabase || !user) {
+  try {
+    const { error, supabase, user } = await getAuthenticatedUser();
+    if (error || !supabase || !user)
+      return { status: "error", message: error ?? "Please log in." };
+    return await savePetAvatar(supabase, petId, revision, null);
+  } catch {
     return {
-      message: authError ?? "Please log in to manage pet profiles.",
       status: "error",
+      message: "We could not confirm removal. Please retry.",
     };
   }
-
-  const pet = await getOwnedPetForMutation(supabase, parsedPetId.data, user.id);
-
-  if (!pet) {
-    return {
-      message: "We could not find that pet profile.",
-      status: "error",
-    };
-  }
-
-  const oldPath = pet.profile_photo_path;
-  const { error: updateError } = await supabase
-    .from("pets")
-    .update({
-      profile_photo_path: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", pet.id)
-    .eq("user_id", user.id);
-
-  if (updateError) {
-    return {
-      message: "We could not remove that profile photo. Please try again.",
-      status: "error",
-    };
-  }
-
-  await removePetAvatarObject(supabase, oldPath, user.id);
-
-  revalidatePath("/dashboard");
-  revalidatePath("/pets");
-  revalidatePath(`/pets/${pet.id}`);
-  revalidatePath(`/pets/${pet.id}/edit`);
-  redirect(`/pets/${pet.id}/edit?message=avatar-removed`);
 }
 
 export async function deletePetAction(
@@ -441,22 +481,38 @@ export async function deletePetAction(
     };
   }
 
-  const { data: pet, error: readError } = await supabase
-    .from("pets")
-    .select("id,name,profile_photo_path,user_id")
-    .eq("id", parsedPetId.data)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (readError || !pet || !isOwnedByAuthenticatedUser(pet.user_id, user.id)) {
+  type PetDeletionResult = {
+    outcome: "deleted" | "absent" | "confirmation_required";
+    avatar_path: string | null;
+  };
+  let deletion: PetDeletionResult;
+  try {
+    // Name confirmation, label changes and FK cascades commit together. Never
+    // fall back to the former multi-request flow if migration 0011 is absent.
+    const { data, error } = await supabase
+      .rpc("delete_pet_transaction", {
+        target_pet_id: parsedPetId.data,
+        confirmation_name: confirmName,
+      })
+      .returns<PetDeletionResult[]>()
+      .single();
+    if (error || !data) {
+      return {
+        fields: { ...EMPTY_PET_FORM_FIELDS, confirmName, petId },
+        message: "We could not confirm pet deletion. Please try again.",
+        status: "error",
+      };
+    }
+    deletion = data;
+  } catch {
     return {
       fields: { ...EMPTY_PET_FORM_FIELDS, confirmName, petId },
-      message: "We could not find that pet profile.",
+      message: "We could not confirm pet deletion. Please try again.",
       status: "error",
     };
   }
 
-  if (confirmName !== pet.name) {
+  if (deletion.outcome === "confirmation_required") {
     return {
       fieldErrors: {
         confirmName: "Type the pet name exactly to confirm deletion.",
@@ -466,24 +522,23 @@ export async function deletePetAction(
       status: "error",
     };
   }
-
-  const { error } = await supabase
-    .from("pets")
-    .delete()
-    .eq("id", parsedPetId.data)
-    .eq("user_id", user.id);
-
-  if (error) {
+  if (deletion.outcome !== "deleted" && deletion.outcome !== "absent") {
     return {
-      fields: { ...EMPTY_PET_FORM_FIELDS, confirmName, petId },
-      message: "We could not delete this pet profile. Please try again.",
+      message: "We could not confirm pet deletion. Please try again.",
       status: "error",
     };
   }
 
-  await removePetAvatarObject(supabase, pet.profile_photo_path, user.id);
+  // Retain private avatar bytes. Deleting a path here could race with a
+  // replacement/finalization or another record referencing the same object.
+  // Reclamation requires a separately coordinated Storage cleanup lifecycle.
 
   revalidatePath("/dashboard");
   revalidatePath("/pets");
+  revalidatePath("/pets/[id]", "page");
+  revalidatePath("/photos");
+  revalidatePath("/photos/[id]", "page");
+  revalidatePath("/review");
+  revalidatePath("/", "layout");
   redirect("/pets?message=deleted");
 }

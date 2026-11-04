@@ -1,6 +1,6 @@
 # PiggieVault
 
-PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository includes authenticated pet and care features plus the Phase 6 foundation for owner-scoped AI reference photos and private image embeddings.
+PiggieVault is a portfolio-quality full-stack and AI project for private guinea pig photo albums and pet-care tracking. The current repository includes authenticated pet and care features, owner-scoped AI reference embeddings, similarity-based pet suggestions, and a human review queue.
 
 ## Live Demo
 
@@ -17,6 +17,7 @@ Implemented:
 - Supabase browser and server client helpers.
 - Server-side authentication actions for login, registration, and logout.
 - Authenticated guinea pig profile CRUD at `/pets`.
+- Desktop authenticated sidebar and photo-first pet profiles, with responsive navigation, real care summaries, and confirmed pet-photo/album views.
 - Private pet profile-avatar upload, replacement, removal, signed rendering, and fallback initials.
 - Private general-photo upload at `/photos/upload` with direct browser uploads to Supabase Storage and PostgreSQL metadata inserts, including browser-side HEIC/HEIF-to-JPEG import conversion.
 - Private photo gallery at `/photos` with chronological month grouping, newest/oldest sorting, and pagination.
@@ -29,6 +30,10 @@ Implemented:
 - Private per-pet health history with controlled categories, calendar dates, editing, deletion, filters, pagination, and recent summaries.
 - Owner-scoped AI reference-photo relationships that reuse existing private gallery objects, with multi-select management, status, retry, and safe removal.
 - A separate authenticated FastAPI service that creates normalized 512-dimensional OpenCLIP image embeddings from server-authorized JPEG/PNG/WEBP bytes without storing raw images.
+- Automatic post-upload and on-demand photo analysis using a deterministic, versioned top-k embedding-similarity classifier.
+- A private `/review` queue for confirming, correcting, multi-selecting, choosing Unknown, or skipping AI suggestions while preserving original machine output.
+- Photo-detail AI lifecycle controls, subtle Gallery labels, and a lightweight Dashboard review count.
+- Pet-specific photos use confirmed/corrected human labels; albums are derived through those photos, and AI reference setup remains a separate occasional workflow.
 - Server-side pet validation, ownership checks, and age display helpers.
 - Server-side photo upload request validation, owner-scoped Storage paths, MIME/type/size/batch limits, EXIF date fallback, HEIC/HEIF original filename preservation, and best-effort Storage cleanup.
 - Environment-variable validation and missing-configuration messaging.
@@ -43,8 +48,8 @@ Implemented:
 
 Planned but not implemented yet:
 
-- Pet-photo classification.
-- AI review queue.
+- Production hosting for the separate FastAPI AI service.
+- Object detection/localization, model training, or fine-tuning.
 
 ## Main Features
 
@@ -58,8 +63,7 @@ PiggieVault is intended to eventually support:
 - Weight and health history.
 - Reference photos for each pet.
 - Private AI reference-photo embeddings.
-- Future image classification and manual review.
-- Manual review and correction for uncertain AI predictions.
+- Image classification with manual review and correction.
 
 ## Technology Stack
 
@@ -86,7 +90,7 @@ Browser
 -> PostgreSQL with Row Level Security
 ```
 
-AI reference-embedding flow:
+AI classification and review flow:
 
 ```text
 Browser
@@ -94,10 +98,12 @@ Browser
 -> owner-scoped private Storage download
 -> authenticated FastAPI service
 -> normalized embedding
--> owner-scoped pgvector reference row
+-> top-k similarity against owner-scoped ready references
+-> versioned prediction and candidate scores
+-> human confirmation/correction in `/review`
 ```
 
-The web application owns authentication, authorization, user flows, and Supabase access. The FastAPI service receives only authorized image bytes plus a server-only shared credential; it has no Supabase key and accepts no remote image URLs. Classification remains a later phase, and the core app keeps working when the AI service is unavailable.
+The web application owns authentication, authorization, similarity classification, review flows, and Supabase access. FastAPI remains focused on embedding computation: it receives only authorized image bytes plus a server-only shared credential, has no Supabase key, and accepts no remote image URLs. The core app and successful uploads keep working when AI is unavailable.
 
 ## Repository Structure
 
@@ -191,9 +197,10 @@ supabase/migrations/0005_private_photo_albums.sql
 supabase/migrations/0006_pet_weight_tracking.sql
 supabase/migrations/0007_private_pet_health_records.sql
 supabase/migrations/0008_ai_reference_photo_embeddings.sql
+supabase/migrations/0009_ai_photo_classification_review.sql
 ```
 
-They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos. Migration 0008 evolves the dormant reference table into a relationship with existing photos and adds embedding processing/model metadata. It is applied to the linked project, whose migration history is synchronized through 0008.
+They define profiles, pets, photos, reference photos, predictions, albums, album-photo relationships, weight records, health records, indexes, foreign keys, check constraints, Row Level Security policies, and private Storage bucket/policies for pet avatars and general user photos. Migration 0008 evolves reference embeddings; migration 0009 adds one owner-scoped prediction per photo, ranked candidates, explicit processing/review states, separate AI suggestions and confirmed labels, retry tokens, and pet-array RLS checks. The linked migration history is synchronized through 0009.
 
 ## Photo Upload Limits
 
@@ -237,6 +244,7 @@ Current tests cover:
 - Weight validation boundaries, calendar-date stability, ordering, latest/previous summaries, mathematical differences, and owner-scoped Server Actions.
 - Health category/title/note/date validation, deterministic ordering, filtering, pagination, and owner-scoped create/edit/delete actions.
 - Reference-photo selection validation, duplicate/cross-owner rejection, add/remove/retry status behavior, malformed embedding responses, model metadata, and unavailable-service handling.
+- Deterministic cosine/top-k classifier mathematics, ordering, Unknown, ambiguous, multi-pet and insufficient-reference outcomes, invalid vector handling, post-upload triggering, owner checks, failure/retry behavior, confirmation/correction/Unknown/skip review, preserved human truth, queue filters, and label presentation.
 - FastAPI health/auth/image/error/model-contract behavior using a mocked model boundary, so normal tests do not download large weights.
 
 Future tests should cover deeper server-action behavior and route behavior with configured Supabase credentials.
@@ -245,11 +253,11 @@ Future tests should cover deeper server-action behavior and route behavior with 
 
 - Confirmed-account login requires completing email confirmation for a non-personal test user.
 - The initial database, pet-avatar Storage, and user-photo Storage migrations have been applied to the linked Supabase project.
-- Dashboard pet, photo, album, weight, and recent-health data are real; AI classification remains planned.
-- Pet profile avatars, private photos, albums, weight tracking, and health records are implemented. AI classification is not implemented yet.
+- Dashboard pet, photo, album, weight, recent-health, and pending AI-review data are real.
+- Current thresholds are provisional because the linked project has only one ready reference and no held-out labeled evaluation set; similarity values are not probabilities.
 - Temporary Supabase Auth test users created during remote verification are not deleted because the app does not use a service-role key.
 - Production AI embedding is not available until the separate FastAPI service is deployed and server-only AI environment values are configured.
-- Final photo classification and the AI review queue are not implemented.
+- Global OpenCLIP embeddings do not provide object detection, localization, or guaranteed multi-pet recognition.
 
 ## Security Notes
 
@@ -263,6 +271,7 @@ Future tests should cover deeper server-action behavior and route behavior with 
 - Frontend filtering is not considered sufficient authorization.
 - Reference actions verify both pet and photo ownership, while composite foreign keys and RLS enforce the same owner relationship in PostgreSQL.
 - Next.js downloads an authorized Storage object and sends bytes—not a signed URL—to the AI service. The service accepts no arbitrary URL, stores no raw image, logs no image bytes, and has no Supabase service-role key.
+- Prediction RLS verifies photo ownership and every candidate, suggested, and confirmed pet ID. AI suggestions stay separate from human-confirmed truth, and retries do not overwrite corrections.
 
 ## Roadmap
 
@@ -287,3 +296,9 @@ Future tests should cover deeper server-action behavior and route behavior with 
 - [Decision log](docs/DECISION_LOG.md)
 - [Interview index](docs/INTERVIEW_INDEX.md)
 - [Learning docs](docs/learning/README.md)
+
+## Software Engineering Finalization checkpoint
+
+The completed reliability work and current release gates are recorded in [the project plan](docs/PROJECT_PLAN.md#current-software-engineering-finalization-status). Migration 0009 is historically recorded as applied; **0010–0014 remain pending production application**, in numerical order, after isolated staging validation. Current application code requires those new database interfaces. Do not deploy the current application against the old schema or leave old classification requests running across rollout. See [atomic classification and rollout notes](docs/learning/18-ai-photo-classification-and-review.md#24-atomic-classification-attempts-migration-0014).
+
+[The offline ML experiment index](docs/ml-experiments/README.md) records four completed development-only experiments. Raw photos, frozen datasets, per-image outputs and caches are intentionally excluded from Git.

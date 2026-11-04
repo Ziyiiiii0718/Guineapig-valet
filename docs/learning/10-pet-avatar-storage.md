@@ -1,120 +1,29 @@
 # Pet Avatar Storage
 
-## What This Feature Does
+Pet avatars remain private in `pet-avatars`. The database stores a path; existing ten-minute signed display URLs and initial-letter fallbacks remain unchanged.
 
-PiggieVault lets an authenticated user upload, replace, and remove a private profile photo for a pet they own. The image appears on the dashboard, pet list, pet detail page, and pet edit page. If no image exists, the app keeps the warm initial-letter avatar fallback.
+## Why larger uploads failed
 
-This is not the general photo gallery, reference-photo workflow, or AI pipeline. It is a focused Storage feature for pet identity.
+Next.js defaults Server Action bodies to 1 MB. Our `next.config.ts` does not override that limit. Previously the form sent the image, plus multipart overhead, through a Server Action even though both application validation and migration 0002's Storage bucket allow 5 MB (5 × 1024 × 1024 bytes).
 
-## Supabase Storage Buckets
+## Direct upload and confirmation
 
-A Supabase Storage bucket is a container for files. PiggieVault uses a private bucket named `pet-avatars`.
+The browser validates JPEG, PNG, or WEBP and a nonempty size no greater than 5 MB. A metadata-only initialization action authenticates the user, checks pet ownership and the displayed avatar revision, and creates a unique owner/pet/UUID path with a signed upload token (`upsert: false`). The browser sends image bytes directly to Supabase Storage using that token. Existing private Storage policies and the bucket's size/type constraints remain in force.
 
-Private means files are not publicly readable by default. A user needs an authenticated session and matching Storage policy to access an object.
+A metadata-only finalization action checks ownership and path scope again, then queries Storage object information to verify existence, size and content type. It invokes `set_pet_avatar`, which locks the owned pet and updates its path only if the expected revision still matches. This is optimistic concurrency: an old browser cannot silently overwrite a newer choice. The same desired path is a successful no-op, so lost responses and concurrent duplicate requests can be retried. Revisions increase even if a photo is subsequently removed, preventing a stale upload from restoring it.
 
-## Object Paths Versus URLs
+The form retains the prepared path/token for retries with the same selection. A failed upload response still leads to verification because the bytes may have arrived. Selecting a new file starts a new upload. Expired tokens require selecting the file again. Interrupted uploads never clear the old avatar. Uncertain database responses can be retried; errors are shown without discarding the current display.
 
-The database stores only the object path:
+Removal uses the same authenticated RPC with a null path and revision. Repeated removal is safe, and stale removal cannot clear a newer replacement. Removal controls depend on the stored path, so they remain available when URL signing fails.
 
-```text
-<user-id>/<pet-id>/<unique-file-name>
-```
+## Cleanup trade-off
 
-It does not store a permanent URL. Permanent public URLs would be risky for private data because anyone with the URL could potentially keep using it. Instead, Server Components create short-lived signed URLs when rendering the UI.
+Upload failure, replacement, removal and pet deletion never delete avatar Storage objects. Checking references and then deleting is unsafe: a concurrent request could attach that object between those steps. Retaining private bytes removes that failure mode, including shared paths and uncertain database outcomes. General photo Storage objects are untouched.
 
-## Signed URLs
+This deliberately leaves replaced, abandoned, and removed avatars in private Storage. No automatic reaper or avatar tombstone infrastructure is added. Future reclamation must coordinate with active uploads and pointer updates (for example durable retirement state enforced on every writer); a scan followed by deletion is insufficient. Existing owner-scoped Storage delete policies remain unchanged, so direct user API deletions remain outside the application workflow guarantee. MIME metadata validation does not decode image contents; existing bucket MIME restrictions remain the upload contract.
 
-A signed URL is a temporary URL that grants access to a private object for a limited time. In PiggieVault, signed URLs are created server-side from the authenticated Supabase session. If signing fails, the UI falls back to the initial-letter avatar rather than showing a broken image.
+## Deployment and verification
 
-## Storage Policies
+Apply pending migrations **0010 → 0011 → 0012 → 0013** before deploying the updated application. Migration 0013 adds `avatar_revision`, a revision-maintaining trigger, and the SECURITY INVOKER `set_pet_avatar` RPC. RLS and Storage policies are unchanged. No production migration is applied by this task. Avoid overlapping old application instances that still delete avatar bytes during rollout.
 
-The `0002_pet_avatar_storage.sql` migration creates Storage policies on `storage.objects`.
-
-The key rule is:
-
-```text
-(storage.foldername(name))[1] = auth.uid()::text
-```
-
-That means the first folder in the object path must equal the authenticated user ID. User A can work inside `user-a/...`, but not inside `user-b/...`.
-
-## Why Browser Ownership Cannot Be Trusted
-
-The browser submits a pet ID and a file, but it does not get to choose a trusted `user_id`. The Server Action reads the current Supabase user, fetches the pet with both `id` and `user_id`, and only then uploads or updates avatar data.
-
-This protects against someone editing form fields or calling the action directly.
-
-## File Validation
-
-The app validates avatar files before upload:
-
-- JPEG, PNG, and WEBP only.
-- Empty files are rejected.
-- Files over 5 MB are rejected.
-- Malformed pet IDs are rejected.
-- Unauthenticated and unauthorized attempts are rejected.
-
-The bucket also has MIME type and size restrictions, so application validation and Storage configuration protect the same boundary.
-
-## Replacing and Cleaning Old Files
-
-Replacing an avatar follows this order:
-
-1. Upload the new object.
-2. Update `pets.profile_photo_path`.
-3. Best-effort remove the old object.
-
-If the upload fails, the database is not changed. If the database update fails, the newly uploaded object is removed best-effort. If old-object cleanup fails, the pet still points to the new valid avatar, and the orphaned old object can be cleaned later.
-
-## No Shared Transaction
-
-PostgreSQL and Supabase Storage do not share one transaction. A database update can succeed while a Storage cleanup call fails, or vice versa. The app handles this by choosing a safe order and by never pointing the pet row at a file before upload succeeds.
-
-## Removing a Photo
-
-Removing an avatar clears `pets.profile_photo_path` and then best-effort deletes the object from Storage. The UI immediately returns to the initial-letter fallback.
-
-## Delete Confirmation Dialog
-
-Pet deletion uses a compact danger zone and an accessible dialog. The dialog names the pet, explains that deletion is permanent, requires typing the pet name, provides Cancel, supports Escape through the native dialog behavior, and prevents repeated submission while pending.
-
-## Common Bugs
-
-- Storing public URLs instead of object paths.
-- Trusting a hidden `user_id` input.
-- Uploading to a path not scoped by authenticated user ID.
-- Updating the pet row before upload succeeds.
-- Forgetting to clean up old files after replacement.
-- Showing broken images when signed URL creation fails.
-- Making a whole card clickable while nesting another link inside it.
-
-## Interview Questions
-
-Q: Why use a private bucket for avatars?
-A: Pet data is private. A private bucket plus signed URLs keeps direct file access limited to authenticated, authorized users.
-
-Q: Why store an object path instead of a URL?
-A: Paths are stable internal identifiers. Signed URLs are temporary access tokens and should be generated when needed, not saved permanently.
-
-Q: How do Storage policies protect users?
-A: They compare the first folder in the object path to `auth.uid()`, so users can only access objects in their own folder.
-
-Q: Why also check ownership in the Server Action?
-A: Defense in depth. The app should reject unauthorized mutations before asking Storage or Postgres, while policies still protect the backend if app code has a bug.
-
-Q: What happens if old avatar cleanup fails?
-A: The pet still points to the new valid avatar. The old object may be orphaned and can be cleaned later.
-
-## 60-Second Explanation
-
-PiggieVault pet avatars use Supabase Storage with a private `pet-avatars` bucket. The app stores only the object path on the pet row, then creates short-lived signed URLs server-side when rendering pages. Upload, replace, remove, and pet deletion all verify the current Supabase user and pet ownership before touching Storage. Storage policies also restrict users to their own top-level folder, so another user cannot read, upload into, or delete someone else's avatar path. File validation rejects empty, oversized, and unsupported image types. If no signed image is available, the UI falls back to the original initial-letter avatar.
-
-## Vocabulary
-
-- Bucket: a Storage container for files.
-- Object path: the internal file path inside a bucket.
-- Signed URL: temporary URL for reading a private object.
-- MIME type: browser/file-declared content type such as `image/png`.
-- RLS: database row-level security.
-- Storage policy: access rule for files in Supabase Storage.
-- Orphaned object: a file no database row currently references.
+Action tests cover size/type checks, object verification, authorization, replacement, removal, retries and failures. `tests/database/run-pet-avatars.py` runs the existing deletion/manual-label suites plus real PostgreSQL avatar transaction, RLS and concurrency checks inside the disposable container documented in `run-photo-deletion.py`; it accepts no production credentials.

@@ -193,6 +193,7 @@ export async function updatePhotoDisplayNameAction(
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   revalidatePath("/photos");
   revalidatePath(`/photos/${parsedPhotoId.data}`);
 
@@ -204,18 +205,6 @@ export async function updatePhotoDisplayNameAction(
     resultId: crypto.randomUUID(),
     status: "success",
   };
-}
-
-async function removeUploadedPhotoObject(
-  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  path: string,
-  userId: string,
-) {
-  if (!isUserPhotoPathForUser(path, userId)) {
-    return;
-  }
-
-  await supabase.storage.from(USER_PHOTO_BUCKET).remove([path]);
 }
 
 export async function initializePhotoUploadsAction(
@@ -337,7 +326,6 @@ export async function finalizePhotoUploadAction(
       category: "INVALID_UPLOAD_METADATA" satisfies UploadErrorCategory,
       message: metadataError,
     });
-    await removeUploadedPhotoObject(supabase, input.path, user.id);
 
     return {
       clientId: input.clientId,
@@ -346,30 +334,57 @@ export async function finalizePhotoUploadAction(
     };
   }
 
-  const { data, error } = await supabase
-    .from("photos")
-    .insert({
-      ai_status: USER_PHOTO_INITIAL_AI_STATUS,
-      file_name: sanitizeOriginalPhotoFileName(input.originalFileName),
-      file_size: input.size,
-      height: input.height,
-      mime_type: input.mimeType,
-      storage_path: input.path,
-      taken_at: normalizePhotoTakenAt(input.takenAt, uploadTimestamp),
-      uploaded_at: uploadTimestamp,
-      user_id: user.id,
-      width: input.width,
-    })
-    .select("id")
-    .single();
+  // Never delete Storage objects during finalization: another request may have
+  // committed (or may still commit) this path, even when this request fails.
+  let photoId: string | undefined;
+  try {
+    const { data, error } = await supabase
+      .from("photos")
+      .insert({
+        ai_status: USER_PHOTO_INITIAL_AI_STATUS,
+        file_name: sanitizeOriginalPhotoFileName(input.originalFileName),
+        file_size: input.size,
+        height: input.height,
+        mime_type: input.mimeType,
+        storage_path: input.path,
+        taken_at: normalizePhotoTakenAt(input.takenAt, uploadTimestamp),
+        uploaded_at: uploadTimestamp,
+        user_id: user.id,
+        width: input.width,
+      })
+      .select("id")
+      .single();
 
-  if (error || !data?.id) {
+    if (!error && data?.id) {
+      photoId = data.id;
+    }
+  } catch {
+    // A transport failure does not prove that the insert was rolled back.
+  }
+
+  if (!photoId) {
+    try {
+      // The existing unique (user_id, storage_path) constraint arbitrates races.
+      // Read through the same authenticated client and RLS; never overwrite a
+      // saved row's metadata or AI state on retry.
+      const { data: existing, error: readError } = await supabase
+        .from("photos")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("storage_path", input.path)
+        .maybeSingle();
+      if (!readError && existing?.id) {
+        photoId = existing.id;
+      }
+    } catch {
+      // Leave the object intact so an uncertain outcome can be retried safely.
+    }
+  }
+
+  if (!photoId) {
     console.warn("[photo-upload]", {
       category: "DATABASE_PREPARATION_FAILED" satisfies UploadErrorCategory,
-      supabaseError: error?.message ?? "No Supabase error body",
-      supabaseStatus: error?.code ?? "unknown",
     });
-    await removeUploadedPhotoObject(supabase, input.path, user.id);
 
     return {
       clientId: input.clientId,
@@ -380,13 +395,14 @@ export async function finalizePhotoUploadAction(
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   revalidatePath("/photos/upload");
   revalidatePath("/photos");
 
   return {
     clientId: input.clientId,
     message: "Uploaded.",
-    photoId: data.id,
+    photoId,
     status: "uploaded",
   };
 }
@@ -418,62 +434,86 @@ export async function deletePhotoAction(
     };
   }
 
-  const { data: photo, error: readError } = await supabase
-    .from("photos")
-    .select("id,file_name,storage_path,user_id")
-    .eq("id", parsedPhotoId.data)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (
-    readError ||
-    !photo ||
-    !isUserPhotoPathForUser(photo.storage_path, user.id)
-  ) {
+  // The RPC atomically deletes metadata/dependents and retains a durable path
+  // tombstone. Never fall back to Storage-first deletion if migration 0010 is
+  // missing, or if the transaction's outcome is unknown.
+  type PhotoDeletionRecord = {
+    photo_id: string;
+    user_id: string;
+    storage_path: string;
+    storage_deleted_at: string | null;
+  };
+  let deletion: PhotoDeletionRecord;
+  try {
+    const { data, error } = await supabase
+      .rpc("begin_photo_deletion", { target_photo_id: parsedPhotoId.data })
+      .returns<PhotoDeletionRecord[]>()
+      .maybeSingle();
+    if (
+      error ||
+      !data ||
+      data.photo_id !== parsedPhotoId.data ||
+      data.user_id !== user.id ||
+      !isUserPhotoPathForUser(data.storage_path, user.id)
+    ) {
+      return {
+        message: "We could not confirm photo deletion. Please try again.",
+        status: "error",
+      };
+    }
+    deletion = data;
+  } catch {
     return {
-      message: "We could not find that photo.",
+      message: "We could not confirm photo deletion. Please try again.",
       status: "error",
     };
   }
 
-  const { error: storageError } = await supabase.storage
-    .from(USER_PHOTO_BUCKET)
-    .remove([photo.storage_path]);
-
-  if (storageError) {
-    console.warn("[photo-gallery]", {
-      category: "DELETE_STORAGE_FAILED",
-      photoId: parsedPhotoId.data,
-    });
-
-    return {
-      message:
-        "We could not remove the private image file, so the photo was not deleted. Please try again.",
-      status: "error",
-    };
-  }
-
-  const { error: deleteError } = await supabase
-    .from("photos")
-    .delete()
-    .eq("id", parsedPhotoId.data)
-    .eq("user_id", user.id);
-
-  if (deleteError) {
-    console.warn("[photo-gallery]", {
-      category: "DELETE_METADATA_FAILED",
-      photoId: parsedPhotoId.data,
-    });
-
-    return {
-      message:
-        "The private image file was removed, but we could not remove the photo record. Please try again.",
-      status: "error",
-    };
+  let cleanupPending = false;
+  if (!deletion.storage_deleted_at) {
+    try {
+      const { error: storageError } = await supabase.storage
+        .from(USER_PHOTO_BUCKET)
+        .remove([deletion.storage_path]);
+      if (storageError) {
+        cleanupPending = true;
+      } else {
+        // Removing an already absent object is safe. If acknowledgement fails,
+        // leave the job pending so retry repeats that same idempotent removal.
+        const { data, error } = await supabase
+          .from("photo_deletions")
+          .update({ storage_deleted_at: new Date().toISOString() })
+          .eq("photo_id", parsedPhotoId.data)
+          .eq("user_id", user.id)
+          .select("photo_id")
+          .maybeSingle();
+        cleanupPending = !!error || !data;
+      }
+    } catch {
+      cleanupPending = true;
+    }
   }
 
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   revalidatePath("/photos");
   revalidatePath(`/photos/${parsedPhotoId.data}`);
+  revalidatePath("/", "layout");
+  revalidatePath("/albums");
+  revalidatePath("/albums/[id]", "page");
+  revalidatePath("/albums/[id]/photos", "page");
+  revalidatePath("/review");
+
+  if (cleanupPending) {
+    console.warn("[photo-gallery]", {
+      category: "DELETE_STORAGE_CLEANUP_PENDING",
+      photoId: parsedPhotoId.data,
+    });
+    return {
+      message:
+        "The photo was removed from your library, but private file cleanup is still pending. Retry deletion to finish cleanup.",
+      status: "error",
+    };
+  }
   redirect("/photos?message=deleted");
 }

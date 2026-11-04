@@ -15,7 +15,13 @@ import {
   type WeightRecord,
 } from "@/lib/weights/core";
 
-export function WeightChart({ records }: { records: WeightRecord[] }) {
+export function WeightChart({
+  records,
+  compact = false,
+}: {
+  records: WeightRecord[];
+  compact?: boolean;
+}) {
   if (!records.length)
     return (
       <div className="empty-state text-sm">
@@ -31,7 +37,7 @@ export function WeightChart({ records }: { records: WeightRecord[] }) {
     <div
       className="weight-chart"
       role="img"
-      aria-label={`Weight chart with ${data.length} measurements from ${data[0].label} to ${data.at(-1)?.label}. Exact values are listed below.`}
+      aria-label={`Weight chart with ${data.length} measurements from ${data[0].label} to ${data.at(-1)?.label}. ${compact ? "Exact values are available in weight history." : "Exact values are listed below."}`}
     >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
@@ -57,9 +63,9 @@ export function WeightChart({ records }: { records: WeightRecord[] }) {
           <Line
             type="linear"
             dataKey="weight"
-            stroke="#6ea15d"
+            stroke={compact ? "#587c43" : "#6ea15d"}
             strokeWidth={3}
-            dot={{ fill: "#f6a56b", r: 4 }}
+            dot={{ fill: compact ? "#587c43" : "#f6a56b", r: compact ? 3 : 4 }}
             activeDot={{ r: 6 }}
             isAnimationActive={false}
           />

@@ -38,8 +38,8 @@ export function ReferencePhotosSection({
             AI reference photos
           </h2>
           <p className="text-secondary mt-2 max-w-2xl text-sm leading-6">
-            Reference photos help PiggieVault describe what {petName} looks like
-            as a visual embedding. They are not used to classify new photos yet.
+            Reference photos help PiggieVault recognize {petName} in new photos.
+            Suggestions remain separate from the pet labels you confirm.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">

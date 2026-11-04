@@ -72,3 +72,25 @@ export function cosineSimilarity(left: number[], right: number[]) {
 
   return left.reduce((sum, entry, index) => sum + entry * right[index]!, 0);
 }
+
+export function parseStoredEmbedding(value: unknown): number[] | null {
+  let parsed: unknown = value;
+
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length !== AI_EMBEDDING_DIMENSION ||
+    parsed.some((entry) => typeof entry !== "number" || !Number.isFinite(entry))
+  ) {
+    return null;
+  }
+
+  return parsed as number[];
+}

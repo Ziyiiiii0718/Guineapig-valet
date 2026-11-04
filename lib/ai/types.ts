@@ -24,3 +24,13 @@ export type AiServiceError = {
 
 export type ReferenceEmbeddingStatus =
   "pending" | "processing" | "ready" | "failed";
+
+export type PhotoAiProcessingStatus =
+  | "pending"
+  | "processing"
+  | "ready_for_review"
+  | "failed"
+  | "insufficient_references";
+
+export type PhotoAiReviewStatus =
+  "pending_review" | "confirmed" | "corrected" | "skipped";
