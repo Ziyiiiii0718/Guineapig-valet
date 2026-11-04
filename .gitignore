@@ -16,8 +16,8 @@ coverage/
 
 # environment
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # logs
 npm-debug.log*
@@ -35,6 +35,7 @@ Thumbs.db
 
 # generated docs or temporary exports
 *.tmp
+.local/
 
 # Python AI service
 .venv/
@@ -49,3 +50,23 @@ ai-service/model-cache/
 
 # Supabase CLI local project metadata
 supabase/.temp/
+
+# Private offline ML photos, manifests, embeddings, and evaluation results
+piggie-ml-dataset/
+
+# Local deployment links and credentials
+.vercel/
+
+# External dataset copies and generated experiment artifacts (never source)
+/Piggy-ml-dataset*/
+/piggie-ml-dataset*/
+/experiments/
+/runs/
+/manifest.json
+/session-decisions.json
+*.npy
+*.npz
+*.pkl
+*.joblib
+*.pt
+*.pth
