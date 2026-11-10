@@ -469,29 +469,25 @@ export async function deletePhotoAction(
     };
   }
 
-  let cleanupPending = false;
-  if (!deletion.storage_deleted_at) {
-    try {
-      const { error: storageError } = await supabase.storage
-        .from(USER_PHOTO_BUCKET)
-        .remove([deletion.storage_path]);
-      if (storageError) {
-        cleanupPending = true;
-      } else {
-        // Removing an already absent object is safe. If acknowledgement fails,
-        // leave the job pending so retry repeats that same idempotent removal.
-        const { data, error } = await supabase
-          .from("photo_deletions")
-          .update({ storage_deleted_at: new Date().toISOString() })
-          .eq("photo_id", parsedPhotoId.data)
-          .eq("user_id", user.id)
-          .select("photo_id")
-          .maybeSingle();
-        cleanupPending = !!error || !data;
-      }
-    } catch {
-      cleanupPending = true;
+  // A prior acknowledgment only proves absence at that instant: a delayed
+  // signed upload can recreate the object. Always repeat removal and recheck.
+  let cleanupPending = true;
+  try {
+    const { error: storageError } = await supabase.storage
+      .from(USER_PHOTO_BUCKET)
+      .remove([deletion.storage_path]);
+    if (!storageError) {
+      // The ownership-checked RPC verifies Storage metadata, even when remove
+      // returns success without deleting anything. Never fall back to UPDATE.
+      const { data: acknowledgment, error: acknowledgmentError } =
+        await supabase.rpc("acknowledge_photo_deletion", {
+          target_photo_id: parsedPhotoId.data,
+        });
+      cleanupPending =
+        !!acknowledgmentError || acknowledgment !== "acknowledged";
     }
+  } catch {
+    cleanupPending = true;
   }
 
   revalidatePath("/dashboard");

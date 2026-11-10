@@ -21,30 +21,51 @@ async function setup() {
     storageFails: false,
     storageThrows: false,
     acknowledgementFails: false,
+    lostAcknowledgementResponse: false,
+    storageNoOp: false,
+    recreateBeforeAcknowledgement: false,
+    acknowledgementResult: "acknowledged" as string | null,
   };
   const events: string[] = [];
-  const rpc = vi.fn((_name: string, args: { target_photo_id: string }) => ({
-    returns() {
-      return this;
-    },
-    maybeSingle: async () => {
-      events.push("database");
-      if (state.databaseFails) return { data: null, error: { code: "failed" } };
-      if (state.userId !== owner || args.target_photo_id !== photoId)
-        return { data: null, error: null };
-      if (state.livePhoto) {
-        state.livePhoto = false;
-        state.job = {
-          photo_id: photoId,
-          user_id: owner,
-          storage_path: path,
-          storage_deleted_at: null,
-        };
-      }
-      if (state.lostDatabaseResponse) throw new Error("response lost");
-      return { data: state.job ? { ...state.job } : null, error: null };
-    },
-  }));
+  const acknowledge = vi.fn(async () => {
+    events.push("acknowledge");
+    if (state.acknowledgementFails)
+      return { data: null, error: { code: "failed" } };
+    if (state.recreateBeforeAcknowledgement) state.objectExists = true;
+    if (state.objectExists) return { data: "storage_present", error: null };
+    if (state.acknowledgementResult !== "acknowledged")
+      return { data: state.acknowledgementResult, error: null };
+    state.job!.storage_deleted_at ??= new Date().toISOString();
+    if (state.lostAcknowledgementResponse) throw new Error("response lost");
+    return { data: "acknowledged", error: null };
+  });
+  const rpc = vi.fn((name: string, args: { target_photo_id: string }) => {
+    expect(args).toEqual({ target_photo_id: photoId });
+    if (name === "acknowledge_photo_deletion") return acknowledge();
+    expect(name).toBe("begin_photo_deletion");
+    return {
+      returns() {
+        return this;
+      },
+      maybeSingle: async () => {
+        events.push("database");
+        if (state.databaseFails)
+          return { data: null, error: { code: "failed" } };
+        if (state.userId !== owner) return { data: null, error: null };
+        if (state.livePhoto) {
+          state.livePhoto = false;
+          state.job = {
+            photo_id: photoId,
+            user_id: owner,
+            storage_path: path,
+            storage_deleted_at: null,
+          };
+        }
+        if (state.lostDatabaseResponse) throw new Error("response lost");
+        return { data: state.job ? { ...state.job } : null, error: null };
+      },
+    };
+  });
   const remove = vi.fn(async (paths: string[]) => {
     events.push("storage");
     expect(state.livePhoto).toBe(false);
@@ -52,29 +73,12 @@ async function setup() {
     if (state.storageThrows) throw new Error("Storage unavailable");
     if (state.storageFails)
       return { error: { message: "Storage unavailable" } };
-    state.objectExists = false;
+    if (!state.storageNoOp) state.objectExists = false;
     return { error: null };
   });
-  const filters: Record<string, string> = {};
-  const update = vi.fn((values: { storage_deleted_at: string }) => {
-    const query = {
-      eq: (key: string, value: string) => {
-        filters[key] = value;
-        return query;
-      },
-      select: () => query,
-      maybeSingle: async () => {
-        events.push("acknowledge");
-        if (state.acknowledgementFails)
-          return { data: null, error: { code: "failed" } };
-        expect(filters).toEqual({ photo_id: photoId, user_id: owner });
-        state.job!.storage_deleted_at = values.storage_deleted_at;
-        return { data: { photo_id: photoId }, error: null };
-      },
-    };
-    return query;
+  const from = vi.fn(() => {
+    throw new Error("Direct table writes forbidden");
   });
-  const from = vi.fn(() => ({ update }));
   const redirect = vi.fn(() => {
     throw redirected;
   });
@@ -103,7 +107,17 @@ async function setup() {
     form.set("storagePath", "attacker-supplied-path");
     return deletePhotoAction({ status: "idle" }, form);
   };
-  return { state, rpc, remove, update, run, events, revalidatePath, redirect };
+  return {
+    state,
+    rpc,
+    remove,
+    acknowledge,
+    from,
+    run,
+    events,
+    revalidatePath,
+    redirect,
+  };
 }
 
 describe("recoverable photo deletion action", () => {
@@ -140,7 +154,7 @@ describe("recoverable photo deletion action", () => {
   it.each(["storageFails", "storageThrows"] as const)(
     "retains a durable retry when %s",
     async (failure) => {
-      const { run, state } = await setup();
+      const { run, state, acknowledge } = await setup();
       state[failure] = true;
       expect(await run()).toMatchObject({
         status: "error",
@@ -149,17 +163,18 @@ describe("recoverable photo deletion action", () => {
       expect(state.livePhoto).toBe(false);
       expect(state.objectExists).toBe(true);
       expect(state.job?.storage_deleted_at).toBeNull();
+      expect(acknowledge).not.toHaveBeenCalled();
       state[failure] = false;
       await expect(run()).rejects.toBe(redirected);
       expect(state.objectExists).toBe(false);
     },
   );
 
-  it("makes repeated successful deletion a no-op for Storage", async () => {
+  it("rechecks Storage on repeated successful deletion", async () => {
     const { run, remove } = await setup();
     await expect(run()).rejects.toBe(redirected);
     await expect(run()).rejects.toBe(redirected);
-    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(2);
   });
 
   it("safely handles simultaneous requests observing the same pending job", async () => {
@@ -193,6 +208,68 @@ describe("recoverable photo deletion action", () => {
     state.acknowledgementFails = false;
     await expect(run()).rejects.toBe(redirected);
     expect(remove).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes a delayed signed-upload replay after prior completion", async () => {
+    const { run, state, remove, from } = await setup();
+    await expect(run()).rejects.toBe(redirected);
+    state.objectExists = true;
+    await expect(run()).rejects.toBe(redirected);
+    expect(state.objectExists).toBe(false);
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it.each(["storageNoOp", "recreateBeforeAcknowledgement"] as const)(
+    "keeps cleanup pending when %s leaves an object present",
+    async (scenario) => {
+      const { run, state } = await setup();
+      await expect(run()).rejects.toBe(redirected);
+      state.objectExists = true;
+      state[scenario] = true;
+      expect((await run()).message).toContain("cleanup is still pending");
+      expect(state.job?.storage_deleted_at).not.toBeNull();
+      state[scenario] = false;
+      await expect(run()).rejects.toBe(redirected);
+      expect(state.objectExists).toBe(false);
+    },
+  );
+
+  it.each(["storage_present", "unavailable", "unexpected", null])(
+    "fails closed for acknowledgment result %s",
+    async (result) => {
+      const { run, state, redirect } = await setup();
+      state.acknowledgementResult = result;
+      expect((await run()).message).toContain("cleanup is still pending");
+      expect(redirect).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rechecks after a committed acknowledgment response is lost", async () => {
+    const { run, state, remove, acknowledge } = await setup();
+    state.lostAcknowledgementResponse = true;
+    expect((await run()).status).toBe("error");
+    expect(state.job?.storage_deleted_at).not.toBeNull();
+    state.lostAcknowledgementResponse = false;
+    await expect(run()).rejects.toBe(redirected);
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(acknowledge).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows concurrent cleanup to recover after one acknowledgment fails", async () => {
+    const { run, state, acknowledge, remove } = await setup();
+    acknowledge.mockRejectedValueOnce(new Error("lost response"));
+    const results = await Promise.allSettled([run(), run()]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toEqual([
+      { status: "rejected", reason: redirected },
+    ]);
+    expect(state.livePhoto).toBe(false);
+    expect(state.objectExists).toBe(false);
+    await expect(run()).rejects.toBe(redirected);
+    expect(remove).toHaveBeenCalledTimes(3);
   });
 
   it("rejects unauthenticated and malformed requests before database access", async () => {

@@ -1,22 +1,19 @@
-"""Integration tests in the dedicated, disposable Docker container only.
+"""Pre-v4 upgrade regressions on isolated PostgreSQL 17 through migration 0014.
 
-Start it with:
-  docker run --rm -d --network none --name piggievault-deletion-tests \
-    -e POSTGRES_HOST_AUTH_METHOD=trust pgvector/pgvector:pg16
-Run: python3 tests/database/run-photo-deletion.py
-Stop: docker stop piggievault-deletion-tests
-No production URL, credentials, host port, or mounted user data is used.
+These historical tests intentionally exercise writes that 0015 later revokes.
+Run run-regressions.py for BOTH this chain and the final v4 authorization suite.
+No remote endpoints or credentials are accepted; the container is auto-removed.
 """
+import atexit
 import pathlib
+from local_postgres import LocalPostgres
 import subprocess
 import time
-import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-CONTAINER = "piggievault-deletion-tests"
-DATABASE = "deletion_test_" + uuid.uuid4().hex
-subprocess.run(["docker", "exec", CONTAINER, "createdb", "-U", "postgres", DATABASE], check=True)
-COMMAND = ["docker", "exec", "-i", CONTAINER, "psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", DATABASE]
+database = LocalPostgres(admin="postgres").__enter__()
+atexit.register(database.close)
+COMMAND = database.command
 
 
 def sql(statement):
@@ -28,8 +25,9 @@ def sql(statement):
 
 sql((ROOT / "tests/database/photo-deletion-bootstrap.sql").read_text())
 for migration in sorted((ROOT / "supabase/migrations").glob("*.sql")):
-    sql(migration.read_text())
-print("PASS: all migrations applied to isolated PostgreSQL", flush=True)
+    if migration.name[:4] <= "0014":
+        sql(migration.read_text())
+print("PASS: pre-v4 migrations 0001–0014 applied to isolated PostgreSQL 17", flush=True)
 # Defaults are test fixture data only, never changes to a production migration.
 sql("alter table public.photos alter column file_name set default 'fixture.jpg'; alter table public.photos alter column file_size set default 1024;")
 sql((ROOT / "tests/database/photo-deletion.sql").read_text())
