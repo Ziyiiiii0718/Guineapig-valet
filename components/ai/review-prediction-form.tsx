@@ -9,6 +9,10 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { PetLabel, PhotoPredictionView } from "@/lib/ai/predictions";
 
+import { withConfirmedPhotoRefresh } from "@/lib/photos/confirmed-action";
+
+const savePhotoLabels = withConfirmedPhotoRefresh(reviewPhotoPredictionAction);
+
 const initialState: ClassificationActionState = { status: "idle" };
 
 type LabelFormProps = {
@@ -49,7 +53,7 @@ function LabelForm({
   const [selected, setSelected] = useState(() => new Set(initialPetIds));
   const [unknown, setUnknown] = useState(initialUnknown);
   const [state, action, pending] = useActionState(
-    reviewPhotoPredictionAction,
+    savePhotoLabels,
     initialState,
   );
 

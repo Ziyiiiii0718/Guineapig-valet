@@ -70,3 +70,11 @@ piggie-ml-dataset/
 *.joblib
 *.pt
 *.pth
+
+# Browser E2E reports and authentication state (private)
+/playwright-report/
+/test-results/
+/playwright/.auth/
+
+# Bounded CI outcome artifact
+/ci-safe-summary.json

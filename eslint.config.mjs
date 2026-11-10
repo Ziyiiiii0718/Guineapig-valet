@@ -5,7 +5,13 @@ const eslintConfig = [
   ...nextVitals,
   ...nextTs,
   {
-    ignores: [".venv/**", ".mypy_cache/**", ".ruff_cache/**", ".pnpm-store/**"],
+    ignores: [
+      ".local/**",
+      ".venv/**",
+      ".mypy_cache/**",
+      ".ruff_cache/**",
+      ".pnpm-store/**",
+    ],
   },
 ];
 
