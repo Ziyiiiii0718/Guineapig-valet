@@ -2,6 +2,18 @@
 
 This roadmap is based on `Project Requirement.docx`. The project is intentionally phased so each step is understandable, testable, and explainable in interviews.
 
+## Current Software Engineering Finalization status
+
+The numbered phases below are the original feature roadmap, not the later finalization phases.
+
+- Finalization Phases 1–2: implemented locally — idempotent photo finalization, recoverable photo deletion, transactional pet deletion, independent manual labels, reliable avatar uploads, review pagination/direct lookup, and atomic AI classification.
+- Staging: migrations 0001–0015-v4 verified; Round 2 passed with one skipped Finalization Replay test. Browser interactions were user-reported manual evidence, supported by independent database/RLS/Storage-metadata verification.
+- Local consolidation: exact v4 migration and compatible deletion action retained; PostgreSQL 17 synthetic regression coverage is separate from hosted evidence.
+- Production: previously recorded through 0009; 0010–0015 remain unverified there. A fresh baseline, controlled migration checkpoint, request drain and recovery plan are required.
+- Release gates: the local Playwright harness is implemented (see `tests/e2e/README.md` and release preparation for executed results); the diagnosed lifecycle rendering failure has a scoped confirmed-save refresh correction validated by five fresh lifecycle runs followed by the full five-test suite, all passing without retries. GitHub Actions CI is implemented locally with hosted execution still unverified; branch/environment protections and both Vercel projects' targeting/credentials remain outstanding. No push or deployment is authorized by consolidation.
+- Evidence and validation commands: [release preparation](RELEASE_PREPARATION.md).
+- ML: [four development experiments](ml-experiments/README.md) completed. Further experiments are paused; frozen datasets remain external and private. Held-out evaluation is not complete.
+
 ## Phase 1: Repository Foundation and Authentication
 
 Objective: Create the project foundation and prepare secure authentication.
@@ -52,7 +64,7 @@ Dependencies: Supabase Storage bucket, photos table.
 
 Expected database changes: `user-photos` private bucket, Storage policy alignment, photo metadata refinements.
 
-Expected API or server actions: signed upload request initialization, metadata insert, best-effort cleanup.
+Expected API or server actions: signed upload request initialization, idempotent metadata finalization, retention on uncertain failure.
 
 Expected UI pages: `/photos/upload`, dashboard upload entry point, recent photos placeholder remains honest.
 
@@ -171,6 +183,8 @@ Completion criteria: Reference photos can be stored and queued for embedding.
 Status: Implemented and verified as Phase 6 of the delivery sequence. Existing private photos can be linked to an owned pet without copying Storage objects, processed through a separate authenticated FastAPI/OpenCLIP service, and tracked as pending, processing, ready, or failed with retry. The additive migration is applied remotely. A real private photo produced a stored 512-dimensional embedding, persisted as ready after refresh, failed honestly while the service was unavailable, and recovered to ready through Retry after the service restarted.
 
 ## Phase 9: AI Classification and Review Queue
+
+Status: Implemented as Phase 7 of the delivery sequence. Private uploads trigger optional post-save analysis, existing photos support Analyze/Retry, top-k OpenCLIP reference similarity produces one/multiple/Unknown suggestions, and `/review` preserves AI output separately from confirmed/corrected human labels. Migration 0009 is applied remotely with owner-scoped RLS. Thresholds remain explicitly provisional until a larger held-out local evaluation exists.
 
 Objective: Classify uploaded photos and support manual correction.
 

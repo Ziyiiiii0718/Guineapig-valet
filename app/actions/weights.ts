@@ -67,6 +67,7 @@ async function ownedPet(
 }
 function refresh(petId: string) {
   revalidatePath(`/pets/${petId}`);
+  revalidatePath("/pets");
   revalidatePath("/dashboard");
 }
 export async function createWeightAction(

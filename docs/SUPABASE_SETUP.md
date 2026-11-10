@@ -42,24 +42,17 @@ Safest dashboard path for the initial database schema:
 
 The project also includes `supabase/migrations/0002_pet_avatar_storage.sql`, which creates the private `pet-avatars` bucket and ownership-scoped Storage policies. `supabase/migrations/0003_user_photo_upload_storage.sql` creates the private `user-photos` bucket, ownership-scoped Storage policies, and photo metadata refinements for general uploads. Prefer applying these through the linked CLI migration workflow so local and remote migration history stay aligned.
 
-CLI path, only if the Supabase CLI is installed and authenticated:
+For the V1.0 release, do not use this historical initial-setup guidance as an upgrade runbook. Apply 0001–0015 in order only under a separately approved target-specific plan. Migrations 0010–0015 have explicit transaction boundaries; ordinary CLI apply was shown during staging preparation to risk committing schema separately from its migration-history insert. A dry run proves selection only. The reviewed execution approach keeps each migration and its ledger entry atomic, stops on the first error, and reconciles lost responses read-only before any retry. Executors and target approvals remain private.
 
-```bash
-supabase link --project-ref your-project-ref
-supabase migration list
-supabase db push
-supabase migration list
-```
-
-Verify the project reference before `db push`. Do not run remote reset commands.
+0015-v4 requires PostgreSQL 17 membership semantics, trusted `postgres` provisioning, private-schema creation, policy/ownership authority, and sufficient Storage metadata grant capabilities. It intentionally does not require granting the writer access to managed Auth objects. Never broaden platform grants to make a failed prerequisite pass. See [release preparation](RELEASE_PREPARATION.md) for current evidence and deployment gates.
 
 ## Manual RLS Verification Checklist
 
 After applying the migration:
 
-1. Confirm these tables exist: `profiles`, `pets`, `photos`, `pet_reference_photos`, `photo_pet_predictions`, `albums`, `album_photos`, `weight_records`, `health_records`.
+1. Confirm these tables exist: `profiles`, `pets`, `photos`, `pet_reference_photos`, `photo_pet_predictions`, `albums`, `album_photos`, `weight_records`, `health_records`, `photo_deletions`.
 2. Confirm RLS is enabled for every user-owned table.
-3. Confirm policies compare ownership columns to `auth.uid()`.
+3. Confirm ordinary authenticated policies use `auth.uid()` and writer policies use the private request-identity helper; inspect grants and RPC owners as well as RLS.
 4. Use two non-personal test accounts.
 5. Create a pet row as User A.
 6. Confirm User B cannot select, update, or delete User A's row.

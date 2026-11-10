@@ -55,6 +55,9 @@ export default async function EditPetPage({
         </Alert>
       ) : null}
       <PetAvatarForm
+        key={`${pet.id}:${pet.avatar_revision ?? 0}`}
+        avatarRevision={pet.avatar_revision ?? 0}
+        hasAvatar={Boolean(pet.profile_photo_path)}
         avatarUrl={pet.profile_photo_url}
         petId={pet.id}
         petName={pet.name}

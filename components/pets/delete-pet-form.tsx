@@ -83,10 +83,10 @@ export function DeletePetForm({ petId, petName }: DeletePetFormProps) {
               id="delete-pet-description"
               className="text-secondary mt-2 text-sm leading-6"
             >
-              This cannot be undone. Pet reference photos, future weight
-              records, future health records, and this pet&apos;s avatar object
-              are removed where applicable. General photo library records are
-              not deleted.
+              This cannot be undone. This pet&apos;s reference-photo records,
+              weight records, health records, and photo labels are removed.
+              General photo library records are kept. Private avatar files are
+              retained in Storage; removing them requires separate cleanup.
             </p>
           </div>
           <label htmlFor="confirmName" className="form-label">

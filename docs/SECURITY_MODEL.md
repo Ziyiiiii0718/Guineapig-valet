@@ -15,7 +15,7 @@ Authentication answers: who is this user?
 
 Authorization answers: what is this user allowed to access?
 
-Supabase Auth authenticates the user and exposes their identity through the session. RLS policies authorize row access by comparing ownership columns to `auth.uid()`.
+Supabase Auth authenticates the user. PostgREST verifies the bearer token and supplies transaction-local request claims. Ordinary authenticated RLS policies use `auth.uid()`; the restricted RPC writer uses the private claims helper described below. Both enforce ownership.
 
 ## RLS Basics
 
@@ -33,7 +33,15 @@ Frontend filtering can be bypassed by direct HTTP requests or browser tooling. R
 
 Phase 1B pet-profile create, update, and delete actions check authentication inside each Server Action. The browser never submits a trusted `user_id`; create actions assign ownership from the authenticated Supabase user. Update and delete actions query and mutate with both pet ID and authenticated owner ID, while RLS remains enabled as defense in depth.
 
-Missing and unauthorized pet IDs intentionally return the same safe not-found style behavior so the app does not reveal whether another user's private pet exists.
+Missing and unauthorized pet IDs intentionally return the same safe not-found style behavior on reads. Pet deletion uses `delete_pet_transaction`, introduced in 0011 and elevated by 0015-v4: it authenticates through `piggievault_private.request_user_id()`, locks only an owned pet, checks the current name, and deletes atomically with label updates and relationship cascades. Missing, already deleted and unauthorized IDs all return `absent`, without a name or avatar path, for safe idempotent retries. RLS remains enforced under the restricted writer role.
+
+Invoker triggers also clean labels for direct deletes and lock referenced owned pets during prediction writes. Trigger functions have an empty search path and are not publicly executable. A stale write that names a deleted or unowned pet is rejected. The action retains avatar bytes and never deletes shared `user-photos` objects. Coordinated future maintenance is required to reclaim orphan avatars safely. Apply migration 0011 after 0010; neither is automatically applied by the application.
+
+## Manual Photo Labeling
+
+`set_photo_labels`, introduced in 0012, uses a restricted SECURITY DEFINER owner after 0015-v4, the private request-identity helper, an owned photo lock and owned pet locks. It preserves existing RLS and 0011's reference guards, so a deleted or cross-account pet cannot be assigned. The action validates IDs, mutually exclusive pets/Unknown input and the revision before calling the RPC. The caller never supplies a trusted user ID or Storage path. Unknown and label removal require no AI service or Storage access.
+
+Human-label revisions guard against concurrent corrections. AI processing updates separate machine columns; a database summary trigger prevents stale AI status writes from hiding current human labels. Changing labels and the photo summary commits together or rolls back together. No service-role key, model change, threshold change or production migration is needed for local implementation; migration 0012 must be applied separately after 0010 and 0011 before deployment.
 
 ## Service Role
 
@@ -49,11 +57,11 @@ The app also accepts the legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` environment vari
 
 Pet profile avatars use a private Supabase Storage bucket named `pet-avatars`. Object paths follow `<authenticated-user-id>/<pet-id>/<unique-file-name>`.
 
-Storage policies on `storage.objects` allow authenticated users to select, insert, update, and delete only objects whose first path folder matches `auth.uid()`. The application also checks the current Supabase user and pet ownership before uploading, replacing, removing, or cleaning up an avatar.
+Storage policies on `storage.objects` allow authenticated users to select, insert, update, and delete only objects whose first path folder matches `auth.uid()`. The application also checks the current Supabase user and pet ownership before preparing uploads, replacing, or removing an avatar.
 
 The `pets.profile_photo_path` column stores only the object path, not a permanent URL. Server Components create short-lived signed URLs for rendering avatars on the dashboard, pet list, pet detail, and pet edit pages.
 
-Replacing an avatar is not a single database transaction because PostgreSQL and Storage are separate systems. The app uploads the new object first, updates the pet row only after upload succeeds, then best-effort removes the old object. If the database update fails, the newly uploaded object is removed best-effort. If old-object cleanup fails, the user-facing profile still points to the new valid object and an orphan can be cleaned later.
+Avatar bytes upload directly with a scoped non-overwrite signed token. Finalization verifies Storage metadata and uses migration 0013’s owned-row, revision-checked `set_pet_avatar` RPC. Replacement/removal never delete Storage objects, avoiding cleanup races; private orphan bytes remain for coordinated maintenance. See [avatar storage](learning/10-pet-avatar-storage.md).
 
 ## General Photo Uploads
 
@@ -63,7 +71,7 @@ The upload page asks the server for signed upload requests. The server reads the
 
 PostgreSQL RLS protects `photos` rows by `user_id`. A database check also requires `storage_path` to begin with the row owner's ID. Storage policies separately protect file reads, writes, updates, and deletes by checking that the first folder in the object path matches `auth.uid()`.
 
-The app stores object paths, not permanent public URLs. If Storage succeeds but metadata insertion fails, the server performs best-effort cleanup of the uploaded object.
+The app stores object paths, not permanent public URLs. Finalization never deletes uploaded objects on validation or database failure: concurrent requests may already reference them. Duplicate or uncertain inserts are reconciled using the authenticated owner and exact Storage path under RLS. Unconfirmed failures retain private objects for safe retry; automatic orphan reclamation requires a coordinated upload lifecycle.
 
 ## Private Photo Browsing
 
@@ -73,9 +81,11 @@ The `user-photos` bucket remains private. The server creates short-lived signed 
 
 ## Private Photo Deletion
 
-Photo deletion never trusts a browser-submitted Storage path. The Server Action receives only a photo ID, verifies the current user, reads the row by `id` and `user_id`, checks the owner-prefixed path, deletes the private Storage object, then deletes the PostgreSQL row.
+Photo deletion accepts only a photo UUID and verifies the current session. The `begin_photo_deletion` RPC is SECURITY INVOKER and filters by `auth.uid()`; existing photo RLS remains enforced. A narrowly scoped SECURITY DEFINER trigger atomically records the retired path when the photo is deleted. Trigger functions use an empty search path and are not publicly executable. Users may read only their own cleanup records. After 0015-v4, they cannot update even the completion timestamp directly; `acknowledge_photo_deletion` verifies ownership and Storage metadata absence before writing it. They cannot insert, change the target path, or delete tombstones.
 
-The app deletes Storage first because an orphaned private object is harder for a user to notice than a failed metadata deletion. If Storage deletion fails, the row is kept. If row deletion fails after Storage succeeds, the app reports a partial failure and leaves a metadata record that can be retried or cleaned up later.
+Storage is removed only after the RPC confirms the owned deletion record. A restrictive Storage DELETE policy adds a committed-tombstone and no-live-reference requirement to the existing owner policy. This protects against stale authenticated clients as well as action retries. Permanent tombstones and serialized lifecycle triggers prevent delayed upload finalization from recreating metadata at a retired path. Legacy reference-path mismatches block cleanup rather than risking shared bytes. Service-role/database-owner operations can bypass RLS and must follow the same protocol operationally.
+
+Storage errors leave durable pending cleanup rather than broken photo rows. No background cleanup service is installed. The release requires migrations 0010–0015 in order and the matching application cleanup action. Missing acknowledgment RPC fails closed; there is no direct-write fallback. See learning/12-private-photo-gallery.md for retry and maintenance requirements.
 
 ## Private Photo Name Updates
 
@@ -87,8 +97,6 @@ Album Server Actions derive the current user from the server-side Supabase sessi
 
 Deleting an album issues no Storage operation and no photo-table delete. PostgreSQL cascades from the album only to its membership rows. Removing a membership similarly deletes only one `album_photos` row.
 
-AI classification remains a future phase.
-
 ## AI reference-photo authorization
 
 Reference-photo Server Actions authenticate with the existing Supabase cookie session, verify the requested pet under the current owner, and load every selected photo through the same owner. Forms never submit a trusted `user_id` or Storage path. PostgreSQL RLS repeats the `auth.uid()` rule, while composite pet-owner and photo-owner foreign keys make a cross-user relationship invalid even if application validation regresses. A unique pet/photo key prevents duplicates.
@@ -97,6 +105,16 @@ Next.js obtains the Storage path only from the authorized `photos` row, checks i
 
 The FastAPI `/embed` endpoint requires a server-only bearer token shared through `AI_SERVICE_TOKEN`; it is never named `NEXT_PUBLIC_*` or sent to browser code. The service has no Supabase key and cannot bypass RLS. It accepts only raw JPEG/PNG/WEBP bodies, never a remote URL, which avoids an SSRF fetch surface. Images are decoded and processed in memory without local persistence. User-visible failures are sanitized categories rather than Python or PyTorch traces.
 
+## AI classification and review authorization
+
+Analyze and Retry accept only a photo UUID. The Server Action authenticates the session, reads the photo with both `id` and current `user_id`, verifies the owner-prefixed Storage path, and uses that owned path for a private bucket download. The browser never supplies a trusted owner, path, vector, candidate, model result, or AI token.
+
+Ready reference embeddings are selected only under the same `user_id` and must match the configured model, version, and dimension. Similarity runs in server-only Next.js code. FastAPI receives only authorized image bytes, MIME type, and its server bearer credential; it receives no user/pet IDs, Supabase key, signed URL, reference vector, or final label.
+
+Review actions load the existing prediction under the current owner. Confirm uses the server-stored suggestion. Correction validates every submitted pet UUID and queries all of them under the owner. Database RLS independently verifies the photo and every candidate, suggestion, and confirmed pet ID. A rollback-only authenticated two-user test verified cross-user prediction reads/updates, cross-user photo prediction insertion, and attaching another user's pet label are rejected.
+
+Prediction rows and candidate metadata are private. Logs expose only sanitized error categories and never cookies, access tokens, credentials, signed URLs, image bodies, or embedding vectors. `.env.local`, local evaluation data, virtual environments, and model caches are ignored. The AI service still has no Supabase service-role credential.
+
 ## Private Weight Records
 
 Weight actions authenticate on the server, verify the referenced pet under the current `user_id`, and scope record reads and mutations by record, pet, and owner. RLS is the database backstop. A composite foreign key requires the record owner to match the pet owner. No service role or Storage access is used.
@@ -104,3 +122,19 @@ Weight actions authenticate on the server, verify the referenced pet under the c
 ## Phase 5 health-record security
 
 Health Server Actions never accept ownership as authoritative browser input. They authenticate the current user, confirm the pet is owned, and scope record reads and writes by user, pet, and record ID. RLS policies and the composite pet-owner foreign key provide database enforcement. Titles and notes render as text, raw database errors are not returned, and no service-role credential is used.
+
+## Atomic AI classification
+
+Migration 0014 introduced start/finish classification RPCs; 0015-v4 makes them restricted SECURITY DEFINER functions. They require identity from the private claims helper, lock only the owned photo and prediction, retain RLS, and commit prediction and photo status together. Completion rejects superseded tokens and uses current manual labels when deriving the photo summary. Machine-result fields are explicitly allowlisted; payloads cannot replace human labels or identity fields. No Storage, model or threshold changes are included. Apply after 0013 and drain old application requests during rollout; see [classification learning notes](learning/18-ai-photo-classification-and-review.md#24-atomic-classification-attempts-migration-0014).
+
+## Final authorization boundary (0015-v4)
+
+The six SECURITY DEFINER functions are `delete_pet_transaction`, `set_photo_labels`, `set_pet_avatar`, `start_photo_classification`, `finish_photo_classification`, and `acknowledge_photo_deletion`. Their owner, `piggievault_rpc_writer`, has no login, inherited roles, BYPASSRLS, table ownership, schema CREATE, or Storage mutation privileges. Functions have an empty search path, qualified object references, explicit owner filters, and minimal table/column grants. API roles cannot SET ROLE to this writer. `begin_photo_deletion` remains SECURITY INVOKER; the existing lifecycle triggers retain their separate narrowly scoped elevation.
+
+`piggievault_private.request_user_id()` is SECURITY INVOKER and reads the legacy subject setting or aggregate `request.jwt.claims` subject. Missing identity returns NULL; malformed UUIDs fail. Only the writer can access this helper; it needs no managed Auth-schema grant. The helper does not verify signatures: PostgREST is that trust boundary. End-user roles must remain NOLOGIN; direct database administrators are trusted and can set request settings.
+
+Sixteen existing policy targets change from PUBLIC to authenticated without changing their expressions. Twelve writer policies preserve ownership checks using the private helper. Ordinary pet metadata and photo insert/rename operations remain available through column grants. Direct prediction writes, pet DELETE, avatar pointer/revision writes, photo AI-status updates, and tombstone acknowledgment are denied to authenticated callers. Protected writes must use the RPCs. Reference embeddings, albums, weights and health retain owner-scoped CRUD. New photos must start `uploaded`.
+
+Restrictive Storage INSERT/UPDATE policies reject retired photo paths using the same per-owner lifecycle lock. Acknowledgment rechecks metadata even for completed tombstones. A previously issued elevated upload capability can still recreate bytes later; every cleanup retry repeats removal and acknowledgment, and maintenance must reconcile completed tombstones as well. No background cleanup worker is installed. Avatar orphan cleanup also remains an operational responsibility.
+
+See [release validation and deployment gates](RELEASE_PREPARATION.md) for the distinction between synthetic SQL tests, hosted staging evidence, manual browser tests and production verification.

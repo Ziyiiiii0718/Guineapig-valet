@@ -77,3 +77,11 @@ PiggieVault uses environment variables for external configuration like the Supab
 - Publishable key: current Supabase name for a client-safe key.
 - Service role: privileged Supabase key.
 - `.env.local`: local uncommitted environment file.
+
+## CI uses generated local configuration
+
+The [release verification workflow](../CI.md) does not receive staging or production secrets. Its first guard rejects inherited Supabase/database/AI/Vercel settings instead of guessing whether a supplied URL or key is safe. The existing browser launcher then creates a disposable local Supabase project and supplies its generated public key to an isolated production build. A public local key does not grant the application's browser administrative privileges; the generated service key stays in the test fixture process.
+
+A fresh runner is a temporary test computer. Normal teardown removes only resources with generated test names; an always-run fallback handles test failures, and runner disposal bounds cleanup after an abrupt shutdown. The fallback deliberately refuses ordinary developer machines. No browser trace or raw log is uploaded: a small artifact reports only which checks passed or failed. This sacrifices some remote debugging detail to keep credentials and synthetic session material out of downloadable artifacts.
+
+CI permission settings control the workflow's GitHub token. They cannot switch off a separate Vercel Git integration; both deployment projects need an independently verified pre-push safeguard.

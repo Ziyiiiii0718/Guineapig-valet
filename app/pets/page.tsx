@@ -3,6 +3,10 @@ import { PetCard } from "@/components/pets/pet-card";
 import { Alert } from "@/components/ui/alert";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { GardenArt } from "@/components/ui/garden-art";
+import { OutlineIcon } from "@/components/ui/outline-icon";
+import { safeDisplayName } from "@/lib/pets/profile-view";
+import { listWeightsForPet } from "@/lib/weights/queries";
 import {
   listPetsForUser,
   requireAuthenticatedSupabase,
@@ -31,20 +35,33 @@ export default async function PetsPage({
   }
 
   const { error, pets } = await listPetsForUser(user.id);
+  const latestWeights = new Map(
+    await Promise.all(
+      pets.map(async (pet) => {
+        const result = await listWeightsForPet(pet.id, user.id);
+        return [
+          pet.id,
+          result.error ? undefined : result.summary.latest?.weight_grams,
+        ] as const;
+      }),
+    ),
+  );
+  const name = safeDisplayName(user.user_metadata);
 
   return (
-    <div className="pets-page">
-      <header className="pets-page-header">
+    <div className="pet-lifestyle pet-index">
+      <header className="pet-index-header">
         <div>
-          <p className="section-kicker">Private pet profiles</p>
-          <h1 className="pets-page-title">Your guinea pigs</h1>
-          <p className="pets-page-intro">
-            Keep each piggie&apos;s profile private and safe. Save photos, track
-            weight, and keep health records together.
+          <p className="pet-index-greeting">
+            {name ? `Welcome back, ${name}!` : "Welcome back!"}
           </p>
+          <h1>
+            My Pets <OutlineIcon name="heart" />
+          </h1>
+          <p className="pet-index-intro">Little lives, a whole lot of love.</p>
         </div>
-        <ButtonLink className="pets-create-button" href="/pets/new">
-          <span aria-hidden="true">+</span> Create pet
+        <ButtonLink href="/pets/new">
+          <span aria-hidden="true">+</span> Add Pet
         </ButtonLink>
       </header>
 
@@ -75,24 +92,26 @@ export default async function PetsPage({
       ) : null}
 
       {pets.length > 0 ? (
-        <section className="pets-composition" aria-label="Your pet profiles">
+        <section className="pet-index-grid" aria-label="Your pet profiles">
           {pets.map((pet) => (
-            <PetCard key={pet.id} pet={pet} />
+            <PetCard
+              key={pet.id}
+              pet={pet}
+              latestWeight={latestWeights.get(pet.id)}
+            />
           ))}
         </section>
       ) : null}
 
       {!error && pets.length > 0 ? (
-        <aside className="pets-privacy-note">
-          <span className="pets-privacy-lock" aria-hidden="true" />
-          <div>
-            <strong>All pet profiles are private to your account.</strong>
-            <p>
-              Only you can view and manage your piggies&apos; care information.
-            </p>
-          </div>
-        </aside>
+        <p className="pet-index-privacy">
+          A private little world. Only you can see your pets and their memories.
+        </p>
       ) : null}
+      <div className="pet-garden-footer">
+        <GardenArt />
+        <p aria-hidden="true">Small paws, happy days ♡</p>
+      </div>
     </div>
   );
 }

@@ -6,11 +6,19 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "calibrate:ai": "node scripts/calibrate-photo-classifier.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:db": "python3 tests/database/run-regressions.py",
+    "lint:app": "eslint app components lib tests proxy.ts next.config.ts vitest.config.ts playwright.config.mts",
+    "test:e2e:smoke": "node --experimental-strip-types tests/e2e/run.ts smoke",
+    "test:e2e:local": "node --experimental-strip-types tests/e2e/run.ts local",
+    "test:e2e:list": "playwright test --list --reporter=list",
+    "test:e2e:safety": "node --experimental-strip-types --test tests/e2e/safety.node.ts",
+    "test:e2e:all": "node --experimental-strip-types tests/e2e/run.ts all"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.1",
@@ -25,6 +33,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -36,6 +45,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.5.19",
     "prettier": "^3.9.5",
+    "supabase": "2.122.1",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"

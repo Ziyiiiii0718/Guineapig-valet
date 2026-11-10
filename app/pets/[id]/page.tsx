@@ -1,155 +1,177 @@
 import { notFound } from "next/navigation";
 import { DeletePetForm } from "@/components/pets/delete-pet-form";
-import { PetAvatar } from "@/components/pets/pet-avatar";
-import { Badge } from "@/components/ui/badge";
-import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatPetAge } from "@/lib/pets/age";
+import { GardenArt } from "@/components/ui/garden-art";
+import { PetProfileHero } from "@/components/pets/pet-profile-hero";
+import { PetProfileAside } from "@/components/pets/pet-profile-aside";
+import { PetCareOverview } from "@/components/pets/pet-care-overview";
+import { AiRecognitionSetup } from "@/components/pets/ai-recognition-setup";
+import {
+  RecentPetPhotos,
+  PetAlbumsSection,
+  PetMediaPagination,
+} from "@/components/pets/pet-media-sections";
 import {
   getPetForUser,
   requireAuthenticatedSupabase,
 } from "@/lib/pets/queries";
-import { displayOptional, formatPetSex } from "@/lib/pets/view";
+import {
+  parsePetProfileView,
+  parsePetMediaPage,
+} from "@/lib/pets/profile-view";
+import {
+  listConfirmedPhotosForPet,
+  listAlbumsFeaturingPet,
+} from "@/lib/pets/media-queries";
 import { petIdSchema } from "@/lib/validation/pets";
 import { listWeightsForPet } from "@/lib/weights/queries";
 import { WeightSection } from "@/components/weights/weight-section";
-import { HealthSummary } from "@/components/health/health-summary";
 import { listHealthForPet } from "@/lib/health/queries";
-import { ReferencePhotosSection } from "@/components/references/reference-photos-section";
 import { isAiServiceConfigured } from "@/lib/ai/config";
 import { listReferencesForPet } from "@/lib/references/queries";
-
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | null | undefined;
-}) {
-  return (
-    <div className="pet-detail-item">
-      <dt>{label}</dt>
-      <dd>{displayOptional(value)}</dd>
-    </div>
-  );
-}
 
 export default async function PetDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ message?: string }>;
+  searchParams?: Promise<{ message?: string; view?: string; page?: string }>;
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const parsedPetId = petIdSchema.safeParse(id);
-
-  if (!parsedPetId.success) {
-    notFound();
-  }
-
+  if (!parsedPetId.success) notFound();
   const { user } = await requireAuthenticatedSupabase();
-
-  if (!user) {
-    notFound();
-  }
-
-  const [{ error, pet }, weights, health, references] = await Promise.all([
-    getPetForUser(parsedPetId.data, user.id),
-    listWeightsForPet(parsedPetId.data, user.id),
-    listHealthForPet(parsedPetId.data, user.id, { limit: 3 }),
-    listReferencesForPet(parsedPetId.data, user.id),
+  if (!user) notFound();
+  const { error, pet } = await getPetForUser(parsedPetId.data, user.id);
+  if (error || !pet) notFound();
+  const view = parsePetProfileView(query?.view);
+  const page = parsePetMediaPage(query?.page);
+  const [weights, health, references, photos, albums] = await Promise.all([
+    listWeightsForPet(pet.id, user.id),
+    listHealthForPet(pet.id, user.id, { limit: 3 }),
+    listReferencesForPet(pet.id, user.id),
+    listConfirmedPhotosForPet(pet.id, user.id, {
+      page: view === "photos" ? page : 1,
+      limit: view === "photos" ? 24 : 5,
+    }),
+    listAlbumsFeaturingPet(pet.id, user.id, {
+      page: view === "albums" ? page : 1,
+      limit: view === "albums" ? 12 : 4,
+    }),
   ]);
-
-  if (error || !pet) {
-    notFound();
-  }
-
+  const latestWeight = weights.error
+    ? undefined
+    : weights.summary.latest?.weight_grams;
   return (
-    <div className="space-y-6">
-      {query?.message === "created" ? (
-        <div className="alert alert-success text-sm" role="status">
-          Pet profile created.
+    <div className="pet-lifestyle pet-home">
+      {query?.message === "created" || query?.message === "updated" ? (
+        <div className="alert alert-success mb-4 text-sm" role="status">
+          Pet profile {query.message}.
         </div>
       ) : null}
-      {query?.message === "updated" ? (
-        <div className="alert alert-success text-sm" role="status">
-          Pet profile updated.
-        </div>
-      ) : null}
-
-      <Card className="pet-profile-hero">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <PetAvatar
-              name={pet.name}
-              src={pet.profile_photo_url}
-              className="pet-avatar-large"
+      <PetProfileHero
+        pet={pet}
+        coverUrl={photos.photos.find((photo) => photo.signed_url)?.signed_url}
+        latestWeight={latestWeight}
+        view={view}
+      />
+      <div className="pet-home-columns">
+        <div className="pet-main-column">
+          {view === "overview" || view === "photos" ? (
+            <Card className="pet-memories-card">
+              <RecentPetPhotos
+                petId={pet.id}
+                petName={pet.name}
+                photos={photos.photos}
+                count={photos.count}
+                error={photos.error}
+                expanded={view === "photos"}
+              />
+              {view === "photos" ? (
+                <PetMediaPagination
+                  petId={pet.id}
+                  view="photos"
+                  page={page}
+                  count={photos.count}
+                  pageSize={24}
+                />
+              ) : (
+                <PetAlbumsSection
+                  petId={pet.id}
+                  petName={pet.name}
+                  albums={albums.albums}
+                  error={albums.error}
+                />
+              )}
+            </Card>
+          ) : null}
+          {view === "albums" ? (
+            <Card className="pet-memories-card">
+              <PetAlbumsSection
+                petId={pet.id}
+                petName={pet.name}
+                albums={albums.albums}
+                error={albums.error}
+                expanded
+              />
+              <PetMediaPagination
+                petId={pet.id}
+                view="albums"
+                page={page}
+                count={albums.count}
+                pageSize={12}
+              />
+            </Card>
+          ) : null}
+          {view === "overview" ? (
+            <PetCareOverview
+              petId={pet.id}
+              weights={weights.records}
+              health={health.records}
+              weightError={weights.error}
+              healthError={health.error}
             />
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="heading-page">{pet.name}</h1>
-                <Badge tone="success">{formatPetSex(pet.sex)}</Badge>
-              </div>
-              <p className="text-secondary mt-2 text-sm">
-                {formatPetAge(pet.birth_date)} · born {pet.birth_date}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <ButtonLink href={`/pets/${pet.id}/edit`} variant="secondary">
-              Edit profile
-            </ButtonLink>
-            <ButtonLink href="/pets" variant="ghost">
-              All pets
-            </ButtonLink>
-          </div>
+          ) : null}
+          {view === "weight" ? (
+            <Card id="pet-weight">
+              {weights.error ? (
+                <p role="alert">
+                  Weight records could not be loaded. Please try again.
+                </p>
+              ) : (
+                <WeightSection
+                  petId={pet.id}
+                  petName={pet.name}
+                  records={weights.records}
+                />
+              )}
+            </Card>
+          ) : null}
         </div>
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr]">
-        <Card>
-          <h2 className="heading-section">Profile notes</h2>
-          <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-            <DetailItem label="Favorite foods" value={pet.favorite_foods} />
-            <DetailItem label="Disliked foods" value={pet.disliked_foods} />
-            <DetailItem label="Personality" value={pet.personality_notes} />
-            <DetailItem label="General notes" value={pet.general_notes} />
-          </dl>
-        </Card>
-
-        <Card soft>
-          <h2 className="heading-section">Private care workspace</h2>
-          <p className="text-secondary mt-2 text-sm leading-6">
-            Photos, albums, weight tracking, health records, and AI reference
-            embeddings stay private to your account. Photo classification is not
-            implemented yet.
-          </p>
-        </Card>
+        <PetProfileAside
+          pet={pet}
+          latestWeight={latestWeight}
+          readyReferences={
+            references.error
+              ? null
+              : references.references.filter(
+                  (reference) => reference.embedding_status === "ready",
+                ).length
+          }
+        />
       </div>
-
-      <Card>
-        <ReferencePhotosSection
-          aiConfigured={isAiServiceConfigured()}
-          petId={pet.id}
-          petName={pet.name}
-          references={references.references}
-        />
-      </Card>
-
-      <Card>
-        <WeightSection
-          petId={pet.id}
-          petName={pet.name}
-          records={weights.records}
-        />
-      </Card>
-
-      <Card>
-        <HealthSummary petId={pet.id} records={health.records} />
-      </Card>
-
+      <AiRecognitionSetup
+        petId={pet.id}
+        petName={pet.name}
+        references={references.references}
+        aiConfigured={isAiServiceConfigured()}
+        error={references.error}
+      />
       <DeletePetForm petId={pet.id} petName={pet.name} />
+      <div className="pet-garden-footer">
+        <GardenArt />
+        <p aria-hidden="true">Same piggies, brighter days ♡</p>
+      </div>
     </div>
   );
 }

@@ -23,27 +23,24 @@ auth.users
 - `pets`: guinea pig profiles owned by a user.
 - `photos`: private uploaded photo metadata, including stable Storage path, original filename, optional editable display name, file size, MIME type, dimensions, upload time, taken time, and AI status.
 - `pet_reference_photos`: owner-safe relationships between pets and existing private photos, plus one normalized pgvector embedding and processing/model metadata.
-- `photo_pet_predictions`: AI or manual labels for photos.
+- `photo_pet_predictions`: one owner-scoped current AI analysis per photo, including ranked candidates, a preserved suggestion, separate human-confirmed labels, model/config metadata, and processing/review state.
 - `albums`: user-created photo collections.
 - `album_photos`: many-to-many join table between albums and photos.
 - `weight_records`: pet weight entries in grams.
 - `health_records`: personal health notes.
 
-## Initial Classification Scope
+## Classification scope
 
-Phase 1A assumes one primary classification result:
+Migration 0009 evolves the dormant single-pet prediction shape without removing legacy columns. New rows support zero candidate pets, one suggested pet, or multiple suggested/confirmed pet IDs. Multiple output remains a global-embedding heuristic, not object detection.
 
-- one specific pet;
-- unknown;
-- not a guinea pig;
-- needs review.
+## Independent manual photo labels
 
-Reliable multi-pet detection is a future enhancement.
+Migration 0012 retains the existing separate machine and human columns in `photo_pet_predictions`; it adds `labels_revision` and a caller/RLS-scoped `set_photo_labels` transaction. Owners can create/edit/clear human labels without an AI result. Machine suggestions and scores stay unchanged. Human labels and the photo summary update atomically; revisions prevent stale edits and a summary trigger protects against delayed AI status writes. Empty confirmed IDs with `confirmed_unknown = true` means explicit Unknown; empty IDs with pending review means unlabeled. Pet-specific galleries continue to use confirmed/corrected human fields regardless of processing status. Apply migrations in order; 0015-v4 subsequently restricts writes and elevates the protected RPCs under a non-BYPASSRLS role.
 
 ## Deletion Behavior
 
 - User account deleted: owned rows cascade because they are private user data.
-- Pet deleted: dependent reference photos, weight records, and health records cascade. Photo records remain because a general photo library may outlive one pet profile; predictions referencing the pet set `pet_id` to null. The application performs best-effort cleanup of the pet avatar Storage object.
+- Pet deleted: migration 0011 removes prediction array labels and the legacy `pet_id`, reopens review when the only confirmed identity is lost, and cascades reference relationships, weights and health records in one transaction. General photos, albums and memberships remain. Prediction reference locks prevent concurrent writers from restoring deleted IDs. The application retains avatar bytes for coordinated future cleanup; migration 0013 adds revision-checked avatar pointer updates.
 - Photo deleted: predictions and album relationships cascade. Storage object deletion must be handled by application/storage logic.
 - Album deleted: album-photo relationships cascade, but original photos remain.
 - Reference relationship deleted: only the relationship and embedding metadata are removed. The original `photos` row, private Storage object, title, and album memberships remain. Deleting the pet or original photo cascades the relationship.
@@ -64,12 +61,13 @@ See:
 - `supabase/migrations/0006_pet_weight_tracking.sql`
 - `supabase/migrations/0007_private_pet_health_records.sql`
 - `supabase/migrations/0008_ai_reference_photo_embeddings.sql`
+- `supabase/migrations/0009_ai_photo_classification_review.sql`
 
 ## Current Photo Upload Metadata
 
 General photo upload stores files in the private `user-photos` bucket and saves the object path in `photos.storage_path`. The object path must start with the same `user_id` as the row. This gives PostgreSQL a database-level check that matches the Storage policy convention.
 
-The current upload phase saves `mime_type` for new uploads and sets `ai_status` to `uploaded`. That status means the file was received but has not been classified by AI.
+The upload phase saves `mime_type` and initially sets `ai_status` to `uploaded`. Classification may then move it through processing, ready-for-review, failed, or insufficient-reference state. A reviewed final label uses the legacy specific-pet/Unknown status while the prediction row remains the authoritative detailed lifecycle.
 
 ## Current Photo Gallery Metadata
 
@@ -83,7 +81,7 @@ Gallery display dates use a typed application helper:
 
 Dates are formatted as UTC calendar dates for stable month grouping. Signed URLs are generated at render time from `storage_path` and are never stored in database columns.
 
-Photo deletion is split across Storage and PostgreSQL because they are separate systems. The app deletes the private Storage object first, then the `photos` row. This favors not leaving private image files behind, while reporting a partial failure if metadata deletion fails afterward.
+Photo deletion uses migration `0010_recoverable_photo_deletion.sql`: a caller/RLS-scoped RPC deletes metadata and all dependent relationships atomically with a durable `photo_deletions` cleanup record. Storage removal happens afterward; failures leave a retryable pending record. Completed records permanently reserve the retired ID/path against late upload finalization. Lifecycle triggers serialize by owner, require READ COMMITTED, and make photo identity/path immutable. Existing inconsistent legacy path references block deletion. Account deletion retains minimal cleanup records for operator recovery. No worker is installed; see learning/12-private-photo-gallery.md for the operational procedure.
 
 ## Editable Photo Names
 
@@ -105,4 +103,20 @@ Migration `0007_private_pet_health_records.sql` evolves the existing child table
 
 The initial schema already enabled `vector` and reserved `pet_reference_photos.embedding vector(512)`. Migration 0008 adds `photo_id`, status, error category, model name/version, dimension, and update time. Composite foreign keys `(pet_id, user_id)` and `(photo_id, user_id)` prevent cross-owner relationships. `(pet_id, photo_id)` is unique, which prevents accidental duplicate references while allowing the same underlying photo to be referenced by a different owned pet if appropriate.
 
-The legacy `storage_path` column becomes nullable for compatibility; new reference rows do not populate it. Next.js always resolves the current path from the authorized `photos` row, avoiding a second source of truth. `embedding_status` is `pending`, `processing`, `ready`, or `failed`; errors use a small sanitized category set. A ready row records the 512-value vector and exact model metadata. No classification labels or thresholds are added in this phase.
+The legacy `storage_path` column becomes nullable for compatibility; new reference rows do not populate it. Next.js always resolves the current path from the authorized `photos` row, avoiding a second source of truth. `embedding_status` is `pending`, `processing`, `ready`, or `failed`; errors use a small sanitized category set. A ready row records the 512-value vector and exact model metadata.
+
+## AI photo predictions and human truth
+
+Migration 0009 adds one unique prediction per `photo_id`, a composite `(photo_id, user_id)` foreign key, explicit processing/review states, ranked `candidate_pet_ids` with parallel score/reference-count arrays, suggested pet IDs or Unknown, confirmed pet IDs or Unknown, model/classifier/configuration metadata, timestamps, sanitized failure category, and a per-attempt processing token.
+
+Parallel array-length and value checks keep persisted candidate evidence internally consistent. Suggested IDs must be a subset of candidates; Unknown cannot coexist with pet IDs. RLS write policies verify the photo, legacy top pet, and every candidate/suggested/confirmed pet belong to `auth.uid()`. Candidate scores retain only pet-level aggregates, not every reference comparison or a duplicate query embedding.
+
+AI suggestion fields are never overwritten by review. Human confirmation updates only confirmed fields, review status/time, and the legacy compatibility status. Reanalysis can refresh machine fields while review is pending; after review, it preserves the suggestion snapshot and all confirmed fields. A photo or user deletion cascades its prediction. Pet labels are resolved from current owner-scoped pets; deleting a pet removes it from future reference comparisons and migration 0011 removes that pet from persisted label arrays atomically with deletion. Its restricted-writer RPC (after 0015-v4) and invoker triggers preserve RLS, and array-reference row locks prevent late writers from restoring deleted IDs. Migration 0011 follows 0010 and never deletes general photos or creates photo-cleanup jobs.
+
+## Final schema through 0015-v4
+
+Migrations 0010–0014 remain immutable dependencies: deletion tombstones/lifecycle guards, transactional pet deletion, manual-label revisions, avatar revisions, and atomic classification tokens. Migration 0015-v4 adds the private request-identity helper and restricted writer, changes protected RPC ownership and policy targets, narrows authenticated column grants, enforces initial photo state, and adds retired-path upload restrictions and `acknowledge_photo_deletion`.
+
+The final schema has ten RLS-enabled application tables, including `photo_deletions`. Acknowledgment must use the RPC; direct timestamp updates are no longer permitted. Tombstones permanently reserve deleted paths/IDs and survive account deletion for operator recovery. The acknowledgment timestamp proves absence only at that instant.
+
+Staging verification recorded migrations 0001–0015 with preserved original data. This does not establish the production schema. See [release preparation](RELEASE_PREPARATION.md) for exact migration provenance and rollout gates.

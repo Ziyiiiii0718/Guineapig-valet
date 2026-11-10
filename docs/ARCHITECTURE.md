@@ -1,5 +1,7 @@
 # Architecture
 
+The authenticated pet UI now uses a desktop sidebar and composed pet overview. `lib/pets/media-queries.ts` derives photos from owner-scoped confirmed/corrected pet labels and albums through those photos, with no schema changes. Cover images use existing confirmed photos or avatar/illustration fallbacks. Full weight management stays on the pet route's Weight view, Health keeps its existing route, and reference setup sits above deletion. See [the pet profile learning note](learning/19-pet-profile-ui-and-confirmed-media.md) for query boundaries, cache invalidation, and verification limits.
+
 ## Current System
 
 ```text
@@ -38,6 +40,8 @@ User submits credentials
 - `app/actions/auth.ts`: server actions for login, registration, logout.
 - `app/actions/pets.ts`: server actions for pet create, update, delete, avatar upload, avatar replacement, and avatar removal.
 - `app/actions/photos.ts`: server actions for signed photo-upload requests, metadata finalization, editable names, and deletion.
+- `app/actions/classification.ts`: owner-authorized analyze, retry, confirm, correction, Unknown, and skip actions.
+- `app/review/page.tsx`: authenticated human review queue with validated URL filters.
 - `app/photos/page.tsx`: authenticated private photo gallery with sorting, pagination, and timeline grouping.
 - `app/photos/[id]/page.tsx`: authenticated private photo detail page.
 - `app/photos/upload/page.tsx`: authenticated private photo upload page.
@@ -51,6 +55,9 @@ User submits credentials
 - `lib/photos/gallery.ts`: display-date fallback, sort parsing, timeline grouping, pagination, and formatting helpers.
 - `lib/photos/display-name.ts`: editable-name validation and shared user-facing filename fallback.
 - `lib/photos/queries.ts`: server-only photo queries and signed URL generation.
+- `lib/ai/classifier.ts`: canonical deterministic top-k similarity classifier.
+- `lib/ai/photo-classification.ts`: private-byte processing, reference loading, persistence, and retry orchestration.
+- `lib/ai/prediction-queries.ts`: owner-scoped prediction, queue, label, and Dashboard count reads.
 - `app/actions/albums.ts`: authenticated album metadata and membership mutations.
 - `app/albums/*`: private album overview, creation, detail, and photo-picker routes.
 - `components/albums/*`: album cards, forms, membership controls, and confirmation UI.
@@ -110,7 +117,7 @@ Upload page
 -> if metadata insert fails, Server Action best-effort removes the Storage object
 ```
 
-General photos use a separate private `user-photos` bucket. The database stores the object path and metadata, not public URLs. The initial `ai_status` is `uploaded`, which means the image has not been analyzed or classified. Direct browser upload keeps large image bytes out of Next.js server actions, which is better suited to serverless deployment. The trade-off is that Storage and PostgreSQL do not share a transaction, so cleanup after partial failure is best effort.
+General photos use a separate private `user-photos` bucket. The database stores the object path and metadata, not public URLs. The initial `ai_status` is `uploaded`. After Storage and metadata succeed, the browser starts a separate non-blocking owner-authorized classification action. Direct browser upload keeps large image bytes out of Next.js server actions, and AI failure cannot roll back the valid photo. The trade-off is that Storage and PostgreSQL do not share a transaction, so cleanup after partial upload failure is best effort.
 
 ## Private Gallery and Timeline Flow
 
@@ -138,7 +145,7 @@ Detail page
 -> revalidate dashboard, gallery, and detail routes
 ```
 
-Deletion removes the Storage object first, then the metadata row. This avoids a misleading success state where the row is gone but the private image remains. The trade-off is that if the later row deletion fails, the app reports that partial failure and leaves a broken metadata row for retry or maintenance cleanup.
+Deletion atomically removes metadata and creates a durable tombstone first. The action then removes the owned Storage object and calls the v4 acknowledgment RPC. Storage errors leave durable pending cleanup; repeated requests always recheck, even after an earlier completion. See the gallery learning note for the maintenance limitations.
 
 ## Editable Photo Name Flow
 
@@ -185,7 +192,7 @@ Reference rows move through `pending`, `processing`, `ready`, or `failed`. Faile
 
 ## Boundary Decision
 
-The web app still does not globally depend on the AI service. Pets, photos, albums, weights, health records, and Dashboard remain usable when AI configuration or deployment is absent; only embedding actions fail gracefully.
+The web app still does not globally depend on the AI service. Pets, photos, albums, weights, health records, and Dashboard remain usable when AI configuration or deployment is absent; embedding and classification attempts fail gracefully.
 
 ## FastAPI embedding service
 
@@ -198,3 +205,29 @@ The web app still does not globally depend on the AI service. Pets, photos, albu
 - `lib/health/queries.ts` performs bounded owner-scoped reads for full history, pet detail, and Dashboard.
 - `app/actions/health.ts` authenticates, verifies pet ownership, validates input, and scopes create/update/delete mutations.
 - Client components provide compact forms and inline editing; PostgreSQL remains the source of truth.
+
+## AI Classification and Review Boundary
+
+```text
+successful private photo insert
+-> owner-authorized Next.js classification action
+-> current compatible ready references (minimum two for a pet)
+-> private image bytes sent to existing FastAPI /embed
+-> canonical Next.js top-k cosine aggregation
+-> one/multiple/Unknown suggestion stored under RLS
+-> authenticated /review human decision
+```
+
+FastAPI remains a focused embedding service. Classification math lives once in `lib/ai/classifier.ts`, close to owner-scoped Supabase reads and writes. For the current small per-user reference sets, loading compatible vectors and comparing them in memory is simpler than a pgvector nearest-neighbor index. A much larger dataset could move candidate retrieval into indexed PostgreSQL queries without changing human review semantics.
+
+`photo_pet_predictions` has one row per photo. A new processing token distinguishes overlapping attempts, while a unique photo constraint prevents duplicate active predictions. Ranked candidate IDs/scores/reference counts and suggested IDs are machine output. Confirmed IDs/Unknown and review status are separate human truth. Before review, retry may refresh machine output; after review it preserves the reviewed suggestion snapshot and confirmed truth while updating only processing state.
+
+Processing states are pending, processing, ready for review, failed, or insufficient references. Review states are pending, confirmed, corrected, or skipped. The `/review` route uses validated URL filters and short-lived owner-authorized thumbnails. Photo detail exposes Analyze/Retry and state; Gallery shows definitive labels only after review and marks unreviewed results as needing review; Dashboard shows a compact pending count.
+
+The classifier uses a versioned top-three reference-similarity mean per eligible pet. Threshold configuration is centralized and explicitly provisional because the linked dataset is not large enough for reliable calibration. Global embeddings can only offer a multiple-pet heuristic; they do not localize or count animals.
+
+## V1.0 protected mutation boundary
+
+The final schema through 0015-v4 separates ordinary owner-scoped metadata CRUD from protected lifecycle operations. Pet deletion, manual labels, avatar pointers, classification start/finish and deletion acknowledgment run through restricted SECURITY DEFINER RPCs. The writer still obeys RLS and derives identity from verified PostgREST claims through a private helper; browser input cannot select its identity. Photo deletion begins through the existing invoker RPC and durable lifecycle trigger, then the Server Action removes Storage bytes and requests verified acknowledgment.
+
+This is a database authorization change, not a new service. AI models, thresholds and experiments are unchanged. See [security model](SECURITY_MODEL.md) and [release preparation](RELEASE_PREPARATION.md).

@@ -21,6 +21,7 @@ import { listRecentPhotosForDashboard } from "@/lib/photos/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatWeightGrams } from "@/lib/weights/core";
 import { listWeightSummariesForDashboard } from "@/lib/weights/queries";
+import { countPhotosNeedingReview } from "@/lib/ai/prediction-queries";
 
 function getFriendlyUserName(metadata: Record<string, unknown> | undefined) {
   const candidates = [
@@ -237,6 +238,30 @@ function DashboardQuickActions({ actions }: { actions: QuickAction[] }) {
   );
 }
 
+function AiReviewPrompt({ count, error }: { count: number; error: unknown }) {
+  if (error) return null;
+  return (
+    <section className="dashboard-ai-review" aria-labelledby="ai-review-title">
+      <div>
+        <p className="section-kicker">AI review</p>
+        <h2 id="ai-review-title">
+          {count > 0
+            ? `${count} ${count === 1 ? "photo needs" : "photos need"} review`
+            : "You’re all caught up"}
+        </h2>
+        <p>
+          {count > 0
+            ? "Confirm or correct private pet suggestions."
+            : "New AI suggestions will appear here after analysis."}
+        </p>
+      </div>
+      <ButtonLink href="/review" variant="secondary">
+        {count > 0 ? "Review photos" : "Open review queue"}
+      </ButtonLink>
+    </section>
+  );
+}
+
 export default async function DashboardPage() {
   const envStatus = getPublicEnvStatus();
 
@@ -263,10 +288,11 @@ export default async function DashboardPage() {
     );
   }
 
-  const [petSummary, recentPhotos, recentAlbums] = await Promise.all([
+  const [petSummary, recentPhotos, recentAlbums, aiReview] = await Promise.all([
     listPetsForUser(user.id),
     listRecentPhotosForDashboard(user.id),
     listRecentAlbumsForDashboard(user.id),
+    countPhotosNeedingReview(user.id),
   ]);
   const petIds = petSummary.pets.map((pet) => pet.id);
   const [weightSummaries, healthRecords] = await Promise.all([
@@ -345,6 +371,7 @@ export default async function DashboardPage() {
 
       <DashboardPetPreview error={petSummary.error} pets={petSummary.pets} />
       <RecentMoments error={recentPhotos.error} photos={recentPhotos.photos} />
+      <AiReviewPrompt count={aiReview.count} error={aiReview.error} />
       <DashboardQuickActions actions={quickActions} />
     </div>
   );

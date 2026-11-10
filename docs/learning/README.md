@@ -19,3 +19,13 @@ Each document explains a major engineering area in interview-friendly language:
 15. `15-pet-weight-tracking.md`
 16. `16-private-pet-health-records.md`
 17. `17-ai-reference-photo-embeddings.md`
+18. `18-ai-photo-classification-and-review.md`
+19. `19-pet-profile-ui-and-confirmed-media.md`
+
+- [20. Offline photo evaluation](20-offline-ml-evaluation.md): local labels, capture sessions, duplicate-safe grouping, frozen splits, and OpenCLIP baseline reporting.
+
+- [21. Cropped OpenCLIP experiment](21-cropped-openclip-experiment.md): local bounding boxes, fixed square crops, protected test set, and paired development evaluation.
+
+- [22: Color-only identity experiment](22-color-identity-experiment.md) — frozen crops, reference-only HSV/Lab prototypes, and development ranking comparison.
+
+- [Completed ML experiments](../ml-experiments/README.md): authoritative results for all four development-only experiments, including [supervised learning](../ml-experiments/04-supervised-learning.md). Older chapters retain chronological setup notes; model experiments are paused and no held-out evaluation is complete.

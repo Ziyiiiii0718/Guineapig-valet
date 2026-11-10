@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>PiggieVault • local crop annotation</title>
+<style>
+body{font:16px system-ui,sans-serif;background:#f6f7f4;color:#18261d;max-width:1100px;margin:24px auto;padding:0 16px}h1{font-size:26px;margin-bottom:8px}button,input,select{font:inherit;padding:8px;border:1px solid #82948a;border-radius:5px}button{cursor:pointer;background:white}button.primary{background:#24583e;color:white}button:disabled{opacity:.5;cursor:default}nav,.fields{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}main{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px}canvas{display:block;max-width:100%;height:auto;background:#ddd;border:1px solid #839087}#photo{touch-action:none;cursor:crosshair}label input[type=number]{width:82px}#message{min-height:26px;font-weight:600}small{display:block;line-height:1.5}aside{background:white;padding:12px}#status{font-weight:600}.warning{color:#7b3c00}@media(max-width:750px){main{grid-template-columns:1fr}aside{max-width:300px}}
+</style>
+</head>
+<body>
+<h1>Guinea pig crop annotation</h1>
+<p>Draw one tight box around the <strong>entire visible guinea pig</strong>, including ears and feet. Use the same rule on every photo. Do not add a margin yourself.</p>
+<p><strong>Local only:</strong> 27 references + 9 development photos. No test images, uploads, or model predictions.</p>
+<nav>
+<button id="previous">Previous</button>
+<select id="picker" aria-label="Choose photo"></select>
+<button id="next">Next</button>
+<span id="status" aria-live="polite"></span>
+</nav>
+<p id="filename"></p>
+<main>
+<div><canvas id="photo" aria-label="Drag a box around the full guinea pig body"></canvas></div>
+<aside><strong>Square crop preview</strong><p><canvas id="preview" width="224" height="224" aria-label="Preview of the proposed square crop"></canvas></p><small>The exporter adds a fixed 5% margin on each side of the longer box dimension. The animal is not stretched. Gray padding appears only beyond the photo edge. OpenCLIP will apply its usual resizing and normalization.</small></aside>
+</main>
+<div class="fields">
+<label>Left x1 <input id="x1" type="number" min="0" step="1"></label>
+<label>Top y1 <input id="y1" type="number" min="0" step="1"></label>
+<label>Right x2 <input id="x2" type="number" min="0" step="1"></label>
+<label>Bottom y2 <input id="y2" type="number" min="0" step="1"></label>
+<button id="save" class="primary">Save box &amp; next</button>
+<button id="clear">Clear box</button>
+</div>
+<small>Coordinates use the original image pixels: (0,0) is top-left; right/bottom are exclusive. You can type coordinates instead of dragging. The green outline is your box.</small>
+<p id="message" role="status"></p>
+<nav>
+<button id="export" class="primary">Export annotations JSON</button>
+<label>Resume from JSON <input id="import" type="file" accept="application/json,.json"></label>
+</nav>
+<p class="warning">“Save box” stores progress in this tab only. Export JSON before closing and after every few photos. Import your latest exported file to resume. The original photos are never modified.</p>
+<script>
+"use strict";
+const data = /*EXPERIMENT_DATA*/null;
+const {spec, previews} = data;
+const items = spec.items;
+const byId = (id) => document.getElementById(id);
+const canvas = byId("photo"), ctx = canvas.getContext("2d");
+const preview = byId("preview"), pc = preview.getContext("2d");
+const fields = ["x1","y1","x2","y2"].map(byId);
+let index = 0, boxes = {}, box = null, image = null, anchor = null, dirty = false, draft = false;
+function valid(b, item) {
+  return Array.isArray(b) && b.length === 4 && b.every(Number.isInteger) &&
+    b[0] >= 0 && b[1] >= 0 && b[2] <= item.width && b[3] <= item.height &&
+    b[2]-b[0] >= 2 && b[3]-b[1] >= 2;
+}
+function updateStatus() {
+  byId("status").textContent = `${Object.keys(boxes).length} / ${items.length} boxes saved in tab`;
+  for (let i=0;i<items.length;i++) byId("picker").options[i].textContent = `${boxes[items[i].path] ? "✓ " : ""}${i+1}. ${items[i].split} · ${items[i].label}`;
+}
+function redraw() {
+  if (!image) return;
+  const item = items[index];
+  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  pc.fillStyle="#808080";pc.fillRect(0,0,224,224);
+  byId("save").disabled = !valid(box,item);
+  if (!valid(box,item)) return;
+  const [x1,y1,x2,y2] = box;
+  const sx=canvas.width/item.width, sy=canvas.height/item.height;
+  ctx.strokeStyle="#00e87b";ctx.lineWidth=3;ctx.strokeRect(x1*sx,y1*sy,(x2-x1)*sx,(y2-y1)*sy);
+  const side=Math.ceil(Math.max(x2-x1,y2-y1)*1.1), left=Math.floor((x1+x2-side)/2), top=Math.floor((y1+y2-side)/2);
+  pc.drawImage(image, -left*224/side,-top*224/side,item.width*224/side,item.height*224/side);
+}
+function setBox(value) {box=value;fields.forEach((field,i)=>field.value=value ? value[i] : "");redraw();}
+function show(i) {
+  index=i;image=null;box=null;draft=false;anchor=null;
+  byId("picker").value=String(i);byId("save").disabled=true;
+  byId("filename").textContent=`${items[i].path} — ${items[i].width} × ${items[i].height} pixels`;
+  byId("previous").disabled=i===0;byId("next").disabled=i===items.length-1;
+  const loaded=new Image();loaded.onload=()=>{
+    if (index!==i) return;
+    image=loaded;canvas.width=loaded.naturalWidth;canvas.height=loaded.naturalHeight;
+    setBox(boxes[items[i].path] ? [...boxes[items[i].path]] : null);updateStatus();
+  };loaded.src=previews[i];
+}
+function navigate(i) {
+  if (draft && !confirm("Discard the current unsaved box? Use Save box & next to keep it.")) {byId("picker").value=String(index);return;}
+  show(i);
+}
+function point(event) {
+  const rect=canvas.getBoundingClientRect(), item=items[index];
+  return [Math.round(Math.max(0,Math.min(item.width,(event.clientX-rect.left)/rect.width*item.width))),
+    Math.round(Math.max(0,Math.min(item.height,(event.clientY-rect.top)/rect.height*item.height)))];
+}
+canvas.addEventListener("pointerdown",event=>{if(!image)return;anchor=point(event);canvas.setPointerCapture(event.pointerId);});
+canvas.addEventListener("pointermove",event=>{
+  if(!anchor)return;
+  const end=point(event);draft=true;
+  setBox([Math.min(anchor[0],end[0]),Math.min(anchor[1],end[1]),Math.max(anchor[0],end[0]),Math.max(anchor[1],end[1])]);
+});
+canvas.addEventListener("pointerup",()=>{anchor=null;});
+canvas.addEventListener("pointercancel",()=>{anchor=null;});
+fields.forEach(field=>field.addEventListener("input",()=>{draft=true;box=fields.map(f=>f.value==="" ? NaN : Number(f.value));redraw();}));
+byId("save").onclick=()=>{
+  if(!valid(box,items[index]))return;
+  boxes[items[index].path]=[...box];dirty=true;draft=false;updateStatus();
+  byId("message").textContent="Box saved in this tab. Export JSON to keep your progress.";
+  if(index<items.length-1)show(index+1);
+};
+byId("clear").onclick=()=>{delete boxes[items[index].path];dirty=true;draft=false;setBox(null);updateStatus();};
+byId("previous").onclick=()=>navigate(index-1);byId("next").onclick=()=>navigate(index+1);
+byId("picker").onchange=event=>navigate(Number(event.target.value));
+byId("export").onclick=()=>{
+  if(draft){byId("message").textContent="Save the current box before exporting.";return;}
+  const payload={version:1,manifest_sha256:spec.manifest_sha256,policy:spec.policy,boxes};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download="crop-annotations.json";a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);dirty=false;
+  byId("message").textContent=`Export requested: ${Object.keys(boxes).length}/36 boxes. Check your Downloads folder before closing.`;
+};
+byId("import").onchange=async event=>{
+  const file=event.target.files[0];if(!file)return;
+  try {
+    if(file.size>1000000)throw Error("File is too large.");
+    const imported=JSON.parse(await file.text());
+    if(imported.version!==1 || imported.manifest_sha256!==spec.manifest_sha256 || JSON.stringify(imported.policy)!==JSON.stringify(spec.policy))throw Error("Different experiment or crop policy.");
+    if(!imported.boxes || typeof imported.boxes!=="object" || Array.isArray(imported.boxes))throw Error("Missing boxes mapping.");
+    for(const [key,value] of Object.entries(imported.boxes)){
+      const item=items.find(row=>row.path===key);
+      if(!item || !valid(value,item))throw Error("Unknown photo or invalid coordinates.");
+    }
+    if((dirty || draft) && !confirm("Replace progress in this tab with the imported file?"))return;
+    boxes=imported.boxes;dirty=false;draft=false;show(index);byId("message").textContent="Imported saved annotations.";
+  }catch(error){byId("message").textContent=`Import stopped: ${error.message}`;}
+};
+window.addEventListener("beforeunload",event=>{if(dirty || draft){event.preventDefault();event.returnValue="";}});
+items.forEach((item,i)=>{const option=document.createElement("option");option.value=String(i);byId("picker").append(option);});
+show(0);
+</script>
+</body>
+</html>

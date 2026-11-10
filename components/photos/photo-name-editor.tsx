@@ -8,7 +8,10 @@ import {
 } from "@/app/actions/photos";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { withConfirmedPhotoRefresh } from "@/lib/photos/confirmed-action";
 import { PHOTO_DISPLAY_NAME_MAX_LENGTH } from "@/lib/photos/display-name";
+
+const savePhotoName = withConfirmedPhotoRefresh(updatePhotoDisplayNameAction);
 
 type PhotoNameEditorProps = {
   displayName: string;
@@ -59,7 +62,7 @@ export function PhotoNameEditor({
   photoId,
 }: PhotoNameEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [state, formAction] = useActionState(updatePhotoDisplayNameAction, {
+  const [state, formAction] = useActionState(savePhotoName, {
     status: "idle",
   } satisfies PhotoNameActionState);
   const editButtonRef = useRef<HTMLButtonElement>(null);

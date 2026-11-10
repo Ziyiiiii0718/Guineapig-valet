@@ -17,7 +17,7 @@ SUPPORTED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 app = FastAPI(
     title="PiggieVault AI Service",
-    description="Private image embeddings only; classification is not implemented.",
+    description="Private image embeddings; classification remains in Next.js.",
     version="0.1.0",
 )
 

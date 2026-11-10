@@ -188,7 +188,7 @@ describe("photo upload server actions", () => {
     ).toBe("SIGNED_UPLOAD_CREATION_FAILED");
   });
 
-  it("cleans up the uploaded object if metadata insertion fails", async () => {
+  it("retains the uploaded object if metadata insertion fails", async () => {
     const remove = vi.fn().mockResolvedValue({ error: null });
     const single = vi
       .fn()
@@ -228,8 +228,8 @@ describe("photo upload server actions", () => {
     });
 
     expect(result.status).toBe("failed");
-    expect(fromStorage).toHaveBeenCalledWith("user-photos");
-    expect(remove).toHaveBeenCalledWith(["user-1/2026/07/photo-id.png"]);
+    expect(fromStorage).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it("initializes converted HEIC uploads with JPEG storage paths", async () => {

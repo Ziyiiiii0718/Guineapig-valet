@@ -1,0 +1,11 @@
+{
+  "aggregation": "top_k_mean",
+  "ambiguityMargin": 0.04,
+  "candidateLimit": 5,
+  "classificationVersion": "embedding-similarity-v1",
+  "configurationVersion": "provisional-2026-09-v1",
+  "minimumReadyReferences": 2,
+  "multiPetThreshold": 0.82,
+  "singlePetThreshold": 0.86,
+  "topKReferences": 3
+}

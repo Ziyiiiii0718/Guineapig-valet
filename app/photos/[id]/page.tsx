@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ConfigNotice } from "@/components/config-notice";
 import { PhotoAlbumsSection } from "@/components/albums/photo-albums-section";
+import { ReviewPredictionForm } from "@/components/ai/review-prediction-form";
+import { PhotoAiSection } from "@/components/ai/photo-ai-section";
 import { DeletePhotoForm } from "@/components/photos/delete-photo-form";
 import { PhotoNameEditor } from "@/components/photos/photo-name-editor";
 import { Alert } from "@/components/ui/alert";
@@ -20,6 +22,7 @@ import {
 import { getPhotoForUser } from "@/lib/photos/queries";
 import { requireAuthenticatedSupabase } from "@/lib/pets/queries";
 import { listAlbumMembershipsForPhoto } from "@/lib/albums/queries";
+import { getPredictionForPhoto } from "@/lib/ai/prediction-queries";
 
 type PhotoDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -74,10 +77,12 @@ export default async function PhotoDetailPage({
     );
   }
 
-  const [{ error, photo }, albumMemberships] = await Promise.all([
-    getPhotoForUser(parsedId.data, user.id),
-    listAlbumMembershipsForPhoto(parsedId.data, user.id),
-  ]);
+  const [{ error, photo }, albumMemberships, predictionResult] =
+    await Promise.all([
+      getPhotoForUser(parsedId.data, user.id),
+      listAlbumMembershipsForPhoto(parsedId.data, user.id),
+      getPredictionForPhoto(parsedId.data, user.id),
+    ]);
 
   if (!photo) {
     notFound();
@@ -175,13 +180,41 @@ export default async function PhotoDetailPage({
           <DetailItem label="MIME type" value={photo.mime_type} />
           <DetailItem
             label="AI status"
-            value={formatAiStatus(photo.ai_status)}
+            value={formatAiStatus(
+              !predictionResult.prediction?.classification_started_at &&
+                predictionResult.prediction?.processing_status === "pending"
+                ? "uploaded"
+                : (predictionResult.prediction?.processing_status ??
+                    "uploaded"),
+            )}
           />
         </dl>
-        <Alert tone="info" className="mt-5 text-sm">
-          AI classification is not implemented yet. This status only describes
-          the current upload/processing state.
-        </Alert>
+      </Card>
+
+      <Card>
+        <h2 className="heading-section">Pet labels</h2>
+        <p className="text-secondary mt-2 mb-4 text-sm">
+          Organize this photo yourself. AI analysis is optional.
+        </p>
+        {predictionResult.error ? (
+          <Alert tone="warning" role="alert">
+            Labels could not be loaded. Refresh the page before editing.
+          </Alert>
+        ) : (
+          <ReviewPredictionForm
+            manual
+            pets={predictionResult.pets}
+            photoId={photo.id}
+            prediction={predictionResult.prediction}
+          />
+        )}
+      </Card>
+
+      <Card>
+        <PhotoAiSection
+          photoId={photo.id}
+          prediction={predictionResult.prediction}
+        />
       </Card>
 
       <Card>

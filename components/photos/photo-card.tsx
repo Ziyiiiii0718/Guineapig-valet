@@ -8,20 +8,27 @@ import {
   getPhotoDisplayDate,
 } from "@/lib/photos/gallery";
 import type { PhotoWithSignedUrl } from "@/lib/photos/queries";
+import {
+  getDefinitivePhotoLabel,
+  type PhotoPredictionView,
+} from "@/lib/ai/predictions";
 
 type PhotoCardProps = {
   photo: PhotoWithSignedUrl;
   priority?: boolean;
+  prediction?: PhotoPredictionView | null;
   variant?: "default" | "gallery";
 };
 
 export function PhotoCard({
   photo,
   priority = false,
+  prediction = null,
   variant = "default",
 }: PhotoCardProps) {
   const displayDate = getPhotoDisplayDate(photo);
   const displayName = getPhotoDisplayName(photo);
+  const definitiveLabel = getDefinitivePhotoLabel(prediction);
   const image = (
     <span className="photo-card-image-wrap">
       {photo.signed_url ? (
@@ -76,6 +83,14 @@ export function PhotoCard({
             {photo.signed_url_error ? (
               <Badge tone="warning">Refresh needed</Badge>
             ) : null}
+            {definitiveLabel ? (
+              <Badge tone="success">{definitiveLabel}</Badge>
+            ) : prediction?.processing_status === "ready_for_review" &&
+              prediction.review_status === "pending_review" ? (
+              <Badge tone="neutral">Needs review</Badge>
+            ) : prediction?.processing_status === "failed" ? (
+              <Badge tone="warning">AI retry available</Badge>
+            ) : null}
           </span>
           <details className="photo-card-menu">
             <summary
@@ -111,6 +126,9 @@ export function PhotoCard({
         </span>
         {photo.signed_url_error ? (
           <Badge tone="warning">Refresh needed</Badge>
+        ) : null}
+        {definitiveLabel ? (
+          <Badge tone="success">{definitiveLabel}</Badge>
         ) : null}
       </span>
     </Link>

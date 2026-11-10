@@ -109,6 +109,7 @@ export async function createAlbumAction(
   }
   revalidatePath("/albums");
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   redirect(`/albums/${data.id}?message=created`);
 }
 
@@ -161,6 +162,7 @@ export async function updateAlbumAction(
   revalidatePath("/albums");
   revalidatePath(`/albums/${parsedId.data}`);
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   revalidatePath("/photos");
   return { message: "Album updated.", status: "success" };
 }
@@ -233,6 +235,7 @@ export async function addPhotosToAlbumAction(
   revalidatePath(`/albums/${parsedAlbumId.data}`);
   revalidatePath(`/albums/${parsedAlbumId.data}/photos`);
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   for (const photoId of photoIds) revalidatePath(`/photos/${photoId}`);
   return {
     message: `${photoIds.length} ${photoIds.length === 1 ? "photo" : "photos"} added.`,
@@ -288,6 +291,7 @@ export async function removePhotoFromAlbumAction(
   revalidatePath(`/albums/${albumId.data}`);
   revalidatePath(`/photos/${photoId.data}`);
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   return {
     message:
       "Photo removed from album. The original photo is still in your library.",
@@ -328,5 +332,6 @@ export async function deleteAlbumAction(
     };
   revalidatePath("/albums");
   revalidatePath("/dashboard");
+  revalidatePath("/pets/[id]", "page");
   redirect("/albums?message=deleted");
 }
