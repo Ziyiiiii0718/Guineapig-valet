@@ -64,7 +64,7 @@ Gallery cards use fixed aspect-ratio containers and `object-fit: cover`. Detail 
 
 The delete Server Action accepts only a photo UUID and authenticates the current user. Migration `0010_recoverable_photo_deletion.sql` adds an owner-scoped `begin_photo_deletion` RPC. In one PostgreSQL transaction it deletes the photo, cascades album memberships, predictions and pet-reference relationships, clears album covers, and writes a durable `photo_deletions` record containing the Storage path. The RPC runs as the caller, so existing photo RLS still applies.
 
-Only after that transaction returns a confirmed owned deletion record does the action remove the private object from `user-photos`. It then records `storage_deleted_at`. Repeated requests return the same deletion record. Completed requests skip Storage entirely; concurrent pending requests may both remove the same object safely.
+Only after that transaction returns a confirmed owned deletion record does the action remove the private object from `user-photos`. It then calls the ownership-checked `acknowledge_photo_deletion` RPC installed by `0015_authorization_boundary_v4.sql`. Only the exact `acknowledged` result counts as success; the RPC checks Storage metadata before recording `storage_deleted_at`. Repeated requests return the same deletion record and always repeat removal and acknowledgment, even with an existing completion timestamp. Concurrent requests may both remove the same object safely. There is no direct outbox UPDATE or privileged-client fallback.
 
 The deletion record also permanently reserves the old photo ID and path. Without that reservation, a delayed upload-finalization retry could recreate metadata while deletion removes the bytes. Database triggers serialize photo creation/deletion per owner with a transaction advisory lock and reject reuse of retired paths/IDs. This requires READ COMMITTED isolation (the Supabase default); lifecycle writes from custom sessions at other isolation levels fail closed. Photo identity and paths are immutable, while ordinary metadata and AI updates are unchanged.
 
@@ -75,12 +75,12 @@ A reference trigger ensures any non-null legacy `pet_reference_photos.storage_pa
 - Database failure: the photo, related records and Storage bytes stay intact. Transaction rollback also removes the cleanup record.
 - Lost database response: Storage is not touched. Retrying by the original photo ID returns the committed cleanup record if the transaction succeeded.
 - Storage failure or process exit after database commit: the photo is already removed from the library, but the private object remains and the cleanup record stays pending. The action reports pending cleanup explicitly.
-- Storage success followed by failed acknowledgement: the record stays pending; retry safely removes an already absent object and acknowledges completion.
+- Storage success followed by failed or lost acknowledgment: the action reports pending cleanup, even if acknowledgment committed. Retry safely removes an already absent object and rechecks through the RPC. Null, unexpected, `unavailable`, or `storage_present` results also remain pending. A successful Storage response alone does not prove absence.
 - Unauthorized or unknown IDs: the RPC returns no owned deletion record, and the action never touches Storage. Completed owned IDs remain distinguishable through their private tombstone for safe retries.
 
-Apply migration 0010 separately, after migrations 0001–0009, before deploying the action. This repository change does not apply it to production. Without the RPC, the action fails safely and never falls back to Storage-first deletion. Existing broken records from historical failures are not repaired by this migration.
+Apply migration 0010 separately, after migrations 0001–0009. This action also requires the staging-verified `0015-v4` acknowledgment RPC after 0011–0014. Staging verified the migration and matching application together; production rollout remains separately gated. Missing acknowledgment RPC leaves cleanup pending without falling back to direct writes. This repository change does not apply it to production. Without the RPC, the action fails safely and never falls back to Storage-first deletion. Existing broken records from historical failures are not repaired by this migration.
 
-There is deliberately no new background worker or scheduled service. Pending cleanup is durable but not automatically retried. A repeated authenticated deletion request for the original ID resumes cleanup. If the detail page has disappeared or the user leaves before retrying, maintenance is required; this change does not add a cleanup dashboard. Operators can inspect pending work with this read-only query in an appropriately authorized environment:
+There is deliberately no new background worker or scheduled service. Pending cleanup is durable but not automatically retried. A repeated authenticated deletion request for the original ID resumes cleanup. If the detail page has disappeared or the user leaves before retrying, maintenance is required; this change does not add a cleanup dashboard. Operators can inspect never-acknowledged work with this read-only query in an appropriately authorized environment:
 
 ```sql
 select photo_id, user_id, storage_path, requested_at
@@ -89,9 +89,9 @@ where storage_deleted_at is null
 order by requested_at;
 ```
 
-For maintenance, use the same workflow: obtain the owned deletion record, verify its path and owner, remove only that path through the Storage API, then acknowledge `storage_deleted_at`. Never delete directly from `storage.objects` using SQL: that is metadata, not the actual bytes. Account deletion retains these minimal cleanup records so pending bytes are not forgotten; cleanup after account deletion needs an authorized operator because the former user's session is gone.
+For maintenance, use the same workflow: obtain the owned deletion record, verify its path and owner, remove only that path through the Storage API, then call `acknowledge_photo_deletion` and require `acknowledged`. Never delete directly from `storage.objects` using SQL: that is metadata, not the actual bytes. Account deletion retains these minimal cleanup records so pending bytes are not forgotten; cleanup after account deletion needs an authorized operator because the former user's session is gone.
 
-Keep completed tombstones: deleting them would allow delayed finalization to reuse deleted paths. They store only IDs, path and timestamps, not filenames, image bytes, embeddings or model output. Retaining these small rows is the trade-off for safe retries without a separate job service. Signed upload tokens already issued before deletion can still leave orphan bytes later, but tombstones prevent recreating live photo records at those paths. Storage retention audits remain an operational responsibility.
+Keep completed tombstones: deleting them would allow delayed finalization to reuse deleted paths. They store only IDs, path and timestamps, not filenames, image bytes, embeddings or model output. Retaining these small rows is the trade-off for safe retries without a separate job service. Signed upload tokens already issued before deletion can still leave orphan bytes later, but tombstones prevent recreating live photo records at those paths. A completion timestamp proves absence only at the acknowledgment instant. Maintenance must reconcile completed tombstones too, after outstanding signed-upload tokens expire; the null-timestamp query above cannot find later recreations. Storage retention audits remain an operational responsibility.
 
 ## 16. Common Gallery Bugs
 
@@ -143,3 +143,13 @@ UTC makes grouping deterministic across server, browser, and test environments.
 - **Partial failure:** One system succeeds while another fails in a multi-system operation.
 - **Object path:** The private Storage key saved in the database.
 - **Service-role key:** A powerful Supabase secret that must never reach browser code.
+
+## Local browser release checks
+
+The [Playwright suite](../../../tests/e2e/README.md) uses generated PNGs and disposable accounts. Its replay case captures the successful finalization request rather than guessing a Server Action identifier, then compares independent database and Storage snapshots after two repeats. This checks that a retry returns the existing photo without duplicating data. Backend-free smoke tests do not prove upload or RLS behavior; the disposable-stack tests and existing PostgreSQL authorization suites provide separate evidence. No staging credentials or private media are part of these tests.
+
+### Confirmed save refresh
+
+Local production-browser diagnosis reproduced successful rename/manual-label Server Actions whose React transition never committed: the server response completed, but the old label revision and disabled Saving control remained visible. Waiting longer did not establish a reliable completion signal. Photo-name and label forms now reload the current document only after their existing action returns success. This reads the authoritative saved state without depending on the suspended transition. Validation errors remain inline; rejected requests are neither retried nor treated as success. Server authentication, ownership checks, revision checks and database writes are unchanged.
+
+The trade-off is a full document load after successful saves, potentially resetting scroll and transient UI state. The shared helper is deliberately limited to these photo forms. Three unit tests check confirmed completion, validation failure and uncertain rejection; the unchanged lifecycle browser assertions verify the rendered result and data preservation. See release preparation for exact repeated-run evidence and the remaining uncertainty about the underlying framework defect.

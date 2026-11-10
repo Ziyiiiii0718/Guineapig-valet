@@ -169,6 +169,8 @@ Current remote verification notes are in [Supabase verification](docs/SUPABASE_V
 
 ## First Vercel Deployment
 
+V1.0 is in local release preparation. Review [release evidence, validation commands and deployment gates](docs/RELEASE_PREPARATION.md) before any push or deployment; the instructions below do not authorize a rollout.
+
 Set these Vercel environment variables before the first deployment:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
@@ -299,6 +301,12 @@ Future tests should cover deeper server-action behavior and route behavior with 
 
 ## Software Engineering Finalization checkpoint
 
-The completed reliability work and current release gates are recorded in [the project plan](docs/PROJECT_PLAN.md#current-software-engineering-finalization-status). Migration 0009 is historically recorded as applied; **0010–0014 remain pending production application**, in numerical order, after isolated staging validation. Current application code requires those new database interfaces. Do not deploy the current application against the old schema or leave old classification requests running across rollout. See [atomic classification and rollout notes](docs/learning/18-ai-photo-classification-and-review.md#24-atomic-classification-attempts-migration-0014).
+The completed reliability work and current release gates are recorded in [the project plan](docs/PROJECT_PLAN.md#current-software-engineering-finalization-status). Migration 0009 is historically recorded as applied; **0010–0015 remain unverified in production**, in numerical order. Staging verified 0015-v4 and the matching application, with one manual replay test skipped. Current application code requires those database interfaces, including acknowledgment. Do not deploy the current application against the old schema or leave old classification requests running across rollout. See [atomic classification and rollout notes](docs/learning/18-ai-photo-classification-and-review.md#24-atomic-classification-attempts-migration-0014).
 
 [The offline ML experiment index](docs/ml-experiments/README.md) records four completed development-only experiments. Raw photos, frozen datasets, per-image outputs and caches are intentionally excluded from Git.
+
+Browser release checks: see the [local Playwright instructions](tests/e2e/README.md). These commands create isolated synthetic fixtures and never accept hosted Supabase or Vercel targets.
+
+## Release CI
+
+The local workflow in [CI documentation](docs/CI.md) verifies application, database and browser behavior using disposable synthetic data. It has no deployment steps. Both Vercel projects' automatic Git deployments must be blocked and reviewed before the first push.

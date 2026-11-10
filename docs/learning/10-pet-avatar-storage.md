@@ -1,5 +1,8 @@
 # Pet Avatar Storage
 
+> Release update: the sections below explain the original 0011–0014 implementation. After 0015-v4, pet deletion, manual labels, avatar updates and classification RPCs use a restricted SECURITY DEFINER writer and private request-identity helper instead of running as the authenticated caller. RLS and explicit ownership checks remain enforced. Direct protected writes are denied. See [the final security boundary](../SECURITY_MODEL.md#final-authorization-boundary-0015-v4) and [release evidence](../RELEASE_PREPARATION.md).
+
+
 Pet avatars remain private in `pet-avatars`. The database stores a path; existing ten-minute signed display URLs and initial-letter fallbacks remain unchanged.
 
 ## Why larger uploads failed
@@ -24,6 +27,6 @@ This deliberately leaves replaced, abandoned, and removed avatars in private Sto
 
 ## Deployment and verification
 
-Apply pending migrations **0010 → 0011 → 0012 → 0013** before deploying the updated application. Migration 0013 adds `avatar_revision`, a revision-maintaining trigger, and the SECURITY INVOKER `set_pet_avatar` RPC. RLS and Storage policies are unchanged. No production migration is applied by this task. Avoid overlapping old application instances that still delete avatar bytes during rollout.
+The release requires migrations **0010 → 0011 → 0012 → 0013 → 0014 → 0015** in order. Migration 0013 introduced `avatar_revision`, a revision-maintaining trigger, and an invoker `set_pet_avatar` RPC. V4 elevates that RPC under the restricted writer, with private request identity and writer-specific RLS; direct avatar pointer/revision updates are denied. No production migration is applied by this task. Avoid overlapping old application instances that still delete avatar bytes during rollout.
 
-Action tests cover size/type checks, object verification, authorization, replacement, removal, retries and failures. `tests/database/run-pet-avatars.py` runs the existing deletion/manual-label suites plus real PostgreSQL avatar transaction, RLS and concurrency checks inside the disposable container documented in `run-photo-deletion.py`; it accepts no production credentials.
+Action tests cover size/type checks, object verification, authorization, replacement, removal, retries and failures. `tests/database/run-pet-avatars.py` runs the existing deletion/manual-label suites plus real PostgreSQL avatar transaction, RLS and concurrency checks inside the disposable container documented in `run-photo-deletion.py`; it accepts no production credentials. Use `python3 tests/database/run-regressions.py` to include the final-v4 permissions and concurrency suite as well.

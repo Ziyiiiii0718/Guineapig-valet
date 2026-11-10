@@ -1,6 +1,8 @@
 # Supabase Verification
 
-Last verified: 2026-07-21
+Historical production verification begins below (initial verification: 2026-07-21).
+
+For the staging 0015-v4 verification and current release limits, see [release preparation](RELEASE_PREPARATION.md). Production was not accessed during local consolidation; the historical entries below are not a fresh production audit.
 
 Project ref: `urhwguxmvpxhlmgudrkm`
 

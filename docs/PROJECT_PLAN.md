@@ -7,10 +7,11 @@ This roadmap is based on `Project Requirement.docx`. The project is intentionall
 The numbered phases below are the original feature roadmap, not the later finalization phases.
 
 - Finalization Phases 1–2: implemented locally — idempotent photo finalization, recoverable photo deletion, transactional pet deletion, independent manual labels, reliable avatar uploads, review pagination/direct lookup, and atomic AI classification.
-- Migration 0009: previously applied according to the recorded remote verification. Migrations **0010 → 0011 → 0012 → 0013 → 0014** remain pending production application; staging validation is required first.
-- Phase 3A migration review: completed as planning; populated-data upgrade, real Supabase boundaries, request draining and recovery rehearsal remain release gates.
-- Phase 3B: staging setup guidance prepared; no isolated staging project or deployment has been provisioned by this workflow.
-- Source preservation: organize local development commits before staging. GitHub reports Vercel integration on the baseline commit; do not push until Preview credentials and deployment targeting are verified to exclude production Supabase.
+- Staging: migrations 0001–0015-v4 verified; Round 2 passed with one skipped Finalization Replay test. Browser interactions were user-reported manual evidence, supported by independent database/RLS/Storage-metadata verification.
+- Local consolidation: exact v4 migration and compatible deletion action retained; PostgreSQL 17 synthetic regression coverage is separate from hosted evidence.
+- Production: previously recorded through 0009; 0010–0015 remain unverified there. A fresh baseline, controlled migration checkpoint, request drain and recovery plan are required.
+- Release gates: the local Playwright harness is implemented (see `tests/e2e/README.md` and release preparation for executed results); the diagnosed lifecycle rendering failure has a scoped confirmed-save refresh correction validated by five fresh lifecycle runs followed by the full five-test suite, all passing without retries. GitHub Actions CI is implemented locally with hosted execution still unverified; branch/environment protections and both Vercel projects' targeting/credentials remain outstanding. No push or deployment is authorized by consolidation.
+- Evidence and validation commands: [release preparation](RELEASE_PREPARATION.md).
 - ML: [four development experiments](ml-experiments/README.md) completed. Further experiments are paused; frozen datasets remain external and private. Held-out evaluation is not complete.
 
 ## Phase 1: Repository Foundation and Authentication

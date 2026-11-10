@@ -154,11 +154,11 @@ Consequences: Calendar labels are stable but may differ from a user's local wall
 
 Can revisit: Yes, if PiggieVault later adds explicit user timezone preferences.
 
-## Decision 12: Photo Deletion Removes Storage Before Metadata
+## Decision 12: Photo Deletion Removes Storage Before Metadata (superseded)
 
 Original ambiguity: Deleting a photo touches Supabase Storage and PostgreSQL, which cannot share one transaction.
 
-Chosen decision: Delete the private Storage object first, then delete the `photos` row.
+Historical decision, superseded by Decision 13: delete the private Storage object first, then delete the `photos` row.
 
 Why: It avoids leaving private image files behind when the user believes the photo was removed.
 
@@ -167,3 +167,17 @@ Alternatives: Delete the database row first; soft-delete rows and clean Storage 
 Consequences: A database deletion failure after Storage deletion can leave metadata pointing at a missing object, so the app reports that partial failure honestly.
 
 Can revisit: Yes, if a background cleanup job or soft-delete workflow is introduced.
+
+## Decision 13: Durable deletion followed by verified Storage cleanup
+
+Migration 0010 atomically deletes photo metadata and dependent relationships while creating a permanent tombstone. Only then does the application remove the owned Storage path. Migration 0015-v4 supplies ownership-checked acknowledgment, which verifies Storage metadata absence. Every retry repeats removal and acknowledgment, including completed tombstones. This replaces Decision 12 because Storage-first failure could leave broken live photo records.
+
+The trade-off is durable pending cleanup without a background worker. Delayed signed uploads can recreate orphan bytes after completion; maintenance must reconcile completed tombstones too. Avatar bytes remain retained for coordinated cleanup.
+
+## Decision 14: Restricted RPC writer with private request identity
+
+0015-v4 is the staging-verified release migration. Earlier API-permissions, v2 and v3 candidates are superseded and must never enter the active migration chain. V2 did not handle PostgreSQL 17 administrative membership correctly; the v3 approach still depended on managed Auth privileges unavailable to the hosted custom role. V4 reads verified PostgREST request claims through a private SECURITY INVOKER helper and supplies writer-specific RLS policies.
+
+Six protected RPCs use a non-login, non-BYPASSRLS writer with limited column rights. This closes direct-write bypasses while preserving RLS and existing application RPC signatures. Making the writer inherit authenticated privileges or using a broad administrator as owner would widen its authority. The cost is additional role/policy provisioning and PostgreSQL 17 migration prerequisites.
+
+Preserve the verified SQL bytes, including historical review comments. Release status and the final semantics are documented outside that immutable file. Schema changes and migration history must share the reviewed transaction boundary; a CLI dry run alone does not prove this. Hosted operational executors and approval artifacts remain private and are not release source.

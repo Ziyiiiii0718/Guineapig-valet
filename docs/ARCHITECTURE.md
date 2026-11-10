@@ -145,7 +145,7 @@ Detail page
 -> revalidate dashboard, gallery, and detail routes
 ```
 
-Deletion removes the Storage object first, then the metadata row. This avoids a misleading success state where the row is gone but the private image remains. The trade-off is that if the later row deletion fails, the app reports that partial failure and leaves a broken metadata row for retry or maintenance cleanup.
+Deletion atomically removes metadata and creates a durable tombstone first. The action then removes the owned Storage object and calls the v4 acknowledgment RPC. Storage errors leave durable pending cleanup; repeated requests always recheck, even after an earlier completion. See the gallery learning note for the maintenance limitations.
 
 ## Editable Photo Name Flow
 
@@ -225,3 +225,9 @@ FastAPI remains a focused embedding service. Classification math lives once in `
 Processing states are pending, processing, ready for review, failed, or insufficient references. Review states are pending, confirmed, corrected, or skipped. The `/review` route uses validated URL filters and short-lived owner-authorized thumbnails. Photo detail exposes Analyze/Retry and state; Gallery shows definitive labels only after review and marks unreviewed results as needing review; Dashboard shows a compact pending count.
 
 The classifier uses a versioned top-three reference-similarity mean per eligible pet. Threshold configuration is centralized and explicitly provisional because the linked dataset is not large enough for reliable calibration. Global embeddings can only offer a multiple-pet heuristic; they do not localize or count animals.
+
+## V1.0 protected mutation boundary
+
+The final schema through 0015-v4 separates ordinary owner-scoped metadata CRUD from protected lifecycle operations. Pet deletion, manual labels, avatar pointers, classification start/finish and deletion acknowledgment run through restricted SECURITY DEFINER RPCs. The writer still obeys RLS and derives identity from verified PostgREST claims through a private helper; browser input cannot select its identity. Photo deletion begins through the existing invoker RPC and durable lifecycle trigger, then the Server Action removes Storage bytes and requests verified acknowledgment.
+
+This is a database authorization change, not a new service. AI models, thresholds and experiments are unchanged. See [security model](SECURITY_MODEL.md) and [release preparation](RELEASE_PREPARATION.md).

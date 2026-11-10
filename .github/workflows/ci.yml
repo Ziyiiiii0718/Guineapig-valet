@@ -1,0 +1,100 @@
+name: Release CI
+
+on:
+  pull_request:
+    branches: [dev/piggievault-v1-finalization, main]
+  push:
+    branches: [dev/piggievault-v1-finalization, main]
+
+# No write, deployment, OIDC, environment or hosted-service credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Release verification
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reject hosted configuration
+        id: preflight
+        run: python3 tests/ci/support.py preflight
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.4"
+          package-manager-cache: false
+      - name: Install frozen dependencies
+        id: install
+        run: |
+          npm install --global pnpm@9.15.4
+          test "$(pnpm --version)" = '9.15.4'
+          pnpm install --frozen-lockfile
+      - name: Safety checks
+        id: safety
+        run: |
+          python3 -m unittest discover -s tests/ci -p 'test_*.py'
+          pnpm test:e2e:safety
+      - name: Application tests
+        id: unit
+        run: pnpm test
+      - name: ESLint
+        id: lint
+        run: pnpm lint:app
+      - name: TypeScript
+        id: types
+        run: pnpm typecheck
+      - name: PostgreSQL 17 regressions
+        id: database
+        run: |
+          docker info > /dev/null
+          docker pull pgvector/pgvector@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
+          pnpm test:db
+      - name: Production build and all browser tests
+        id: browser
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test:e2e:all
+      - name: Clean disposable resources even after failure
+        id: cleanup
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        timeout-minutes: 5
+        run: python3 tests/ci/support.py cleanup
+      - name: Write bounded outcome summary
+        id: summary
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          CHECK_PREFLIGHT: ${{ steps.preflight.outcome }}
+          CHECK_INSTALL: ${{ steps.install.outcome }}
+          CHECK_SAFETY: ${{ steps.safety.outcome }}
+          CHECK_UNIT: ${{ steps.unit.outcome }}
+          CHECK_LINT: ${{ steps.lint.outcome }}
+          CHECK_TYPES: ${{ steps.types.outcome }}
+          CHECK_DATABASE: ${{ steps.database.outcome }}
+          CHECK_BROWSER: ${{ steps.browser.outcome }}
+          CHECK_CLEANUP: ${{ steps.cleanup.outcome }}
+        run: python3 tests/ci/support.py summary
+      - name: Upload sanitized failure outcomes only
+        if: ${{ failure() && steps.summary.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-ci-outcomes
+          path: ci-safe-summary.json
+          retention-days: 3
+          if-no-files-found: error
+          include-hidden-files: false

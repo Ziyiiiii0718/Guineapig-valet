@@ -1,5 +1,8 @@
 # 09. Pet Profile CRUD
 
+> Release update: the sections below explain the original 0011–0014 implementation. After 0015-v4, pet deletion, manual labels, avatar updates and classification RPCs use a restricted SECURITY DEFINER writer and private request-identity helper instead of running as the authenticated caller. RLS and explicit ownership checks remain enforced. Direct protected writes are denied. See [the final security boundary](../SECURITY_MODEL.md#final-authorization-boundary-0015-v4) and [release evidence](../RELEASE_PREPARATION.md).
+
+
 ## 1. What CRUD Means
 
 CRUD means Create, Read, Update, and Delete. In PiggieVault Phase 1B, an authenticated user can create guinea pig profiles, list their own pets, view one private profile, edit it, and delete it with confirmation.
@@ -74,7 +77,7 @@ The existing schema already defines deletion rules:
 
 ### Transactional deletion (finalization phase)
 
-Migration `0011_transactional_pet_deletion.sql` replaces the application's sequence of prediction updates and a later pet delete with one `delete_pet_transaction` RPC. It runs as the authenticated caller, scopes the pet to `auth.uid()`, locks the pet row, checks the typed name against the current stored name, then deletes it. All existing RLS policies remain in force. If the pet is absent, already deleted, or owned by someone else, the RPC returns the same empty-of-private-data `absent` outcome. Repeated requests therefore succeed as a no-op without revealing another owner's pet.
+Migration `0011_transactional_pet_deletion.sql` replaces the application's sequence of prediction updates and a later pet delete with one `delete_pet_transaction` RPC. Originally SECURITY INVOKER, it runs under the restricted writer after 0015-v4, scopes the pet to the private request identity, locks the pet row, checks the typed name against the current stored name, then deletes it. Writer-specific RLS preserves ownership isolation. If the pet is absent, already deleted, or owned by someone else, the RPC returns the same empty-of-private-data `absent` outcome. Repeated requests therefore succeed as a no-op without revealing another owner's pet.
 
 A BEFORE DELETE trigger performs label cleanup in that same transaction, including for direct owner-authorized deletes. It removes the pet from candidate, suggested, and confirmed ID arrays while keeping candidate scores and reference counts aligned. If the last suggested pet disappears, the suggestion becomes Unknown. If the only human-confirmed pet disappears, review becomes pending again, the confirmation flag/time are cleared, and the shared photo's summary status becomes `needs_review`. Remaining confirmed pets and explicit human-confirmed Unknown are preserved. The legacy `pet_id` becomes null. Model metadata, confidence scores for remaining candidates, and classification processing state are not recomputed.
 
@@ -84,7 +87,7 @@ Array labels do not have ordinary foreign keys. A prediction-write trigger there
 
 ### Storage boundary and operational limits
 
-Pet deletion retains avatar bytes, as do avatar replacement and removal. This prevents reference-check/deletion races. Private orphan bytes require coordinated future maintenance; see [avatar storage](10-pet-avatar-storage.md). General photo deletion continues using migration 0010’s separate durable workflow.
+The confirmation dialog distinguishes deleted pet records and labels from retained general photos and avatar files. Pet deletion retains avatar bytes, as do avatar replacement and removal. This prevents reference-check/deletion races. Private orphan bytes require coordinated future maintenance; see [avatar storage](10-pet-avatar-storage.md). General photo deletion continues using migration 0010’s separate durable workflow.
 
 The database transaction cannot include an in-flight external AI service call. A late prediction referencing the deleted pet is rejected and may need retry. Separately issued classification/review status writes are not made transactional by this change; the prediction label arrays and review fields remain the authoritative identity state.
 
@@ -92,7 +95,7 @@ The database transaction cannot include an in-flight external AI service call. A
 
 Apply migrations 0001–0009, then **0010**, then **0011**, before deploying the updated actions. No migration is applied by the application or by this task. If 0011 is missing, pet deletion reports failure without falling back to the unsafe multi-request sequence. Existing malformed data is not silently repaired; a conflicting constraint or invalid label makes deletion fail safely for investigation.
 
-Run `python3 tests/database/run-pet-deletion.py` against the dedicated disposable container described in `run-photo-deletion.py`. The runner first executes the complete migration 0010 suite, then tests pet deletion, full-row rollback after injected prediction/delete failures, RLS, exact-name confirmation, label-array alignment, shared-photo preservation, relationship cascades, direct/repeated deletion, and real concurrent label writes/deletion. It never accepts a production URL or credentials. Action tests in `tests/pet-deletion.test.ts` cover RPC failures, uncertain responses, retries, authorization, and avatar retention.
+Run `python3 tests/database/run-regressions.py` for the pre-v4 upgrade chain and final-v4 tests on automatically provisioned disposable PostgreSQL 17 containers. The historical pet runner remains available separately. The runner first executes the complete migration 0010 suite, then tests pet deletion, full-row rollback after injected prediction/delete failures, RLS, exact-name confirmation, label-array alignment, shared-photo preservation, relationship cascades, direct/repeated deletion, and real concurrent label writes/deletion. It never accepts a production URL or credentials. Action tests in `tests/pet-deletion.test.ts` cover RPC failures, uncertain responses, retries, authorization, and avatar retention.
 
 ## 13. Testing Strategy
 
